@@ -64,7 +64,7 @@ const state = {
   view:"dashboard", taskView:"tabla", scale:1, seq:1,
   sort:{col:"n",dir:"asc"}, group:"", showDone:false,
   objSel:null, objReviewMonth:null, objFilterArea:"", justSavedReview:null,
-  secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null,
+  secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[],
@@ -145,7 +145,7 @@ function renderNav(){
     + `<div class="sep"></div><a href="#" class="${state.view==='config'?'active':''}" data-go="config"><span class="ic">⚙</span>Configuración</a>`;
   $("#nav").querySelectorAll("a[data-go]").forEach(a=>a.onclick=e=>{ e.preventDefault(); go(a.dataset.go); });
 }
-function go(id){ state.view=id; state.objSel=null; state.secTab="tareas"; state.reuSel=null; render(); }
+function go(id){ state.view=id; state.objSel=null; state.secTab="tareas"; state.reuSel=null; state.secScEdit=false; render(); }
 function setScale(dir){ if(dir===0)state.scale=1; else state.scale=Math.min(1.35,Math.max(.82,state.scale+dir*0.09)); document.documentElement.style.setProperty("--scale",state.scale.toFixed(2)); }
 
 function render(){
@@ -455,18 +455,27 @@ function reviewSection(o){
 /* ============================================================
    SECCIONES OPERATIVAS (Administración, Calidad, …)
    ============================================================ */
+function sectionShortcuts(secId){
+  const items=state.shortcuts.map((s,gi)=>({s,gi})).filter(x=>(x.s.section||"dashboard")===secId);
+  const strip = items.length
+    ? `<div class="shortcuts" style="margin-bottom:10px">${items.map(({s})=>`<a class="sc-btn" href="${esc(s.url||'#')}" target="_blank"><span class="ic">${esc(s.ic)}</span>${esc(s.label)}</a>`).join("")}</div>`
+    : `<p style="color:var(--tx-faint);font-size:.82em;margin:0 0 10px">Sin accesos directos en esta sección todavía.</p>`;
+  const toggle=`<button class="btn-ghost ${state.secScEdit?'on':''}" style="font-size:.78em;padding:4px 10px" data-act="secScEdit">${state.secScEdit?'✓ Listo':'✎ Administrar accesos'}</button>`;
+  let editor="";
+  if(state.secScEdit){
+    const rows=items.map(({s,gi})=>`<div class="sc-edit"><input class="inp" style="width:46px;text-align:center" value="${esc(s.ic)}" data-act="scF" data-i="${gi}" data-f="ic"><input class="inp" style="flex:0 0 150px" value="${esc(s.label)}" data-act="scF" data-i="${gi}" data-f="label" placeholder="Nombre"><input class="inp" style="flex:1;min-width:120px" value="${esc(s.url)}" data-act="scF" data-i="${gi}" data-f="url" placeholder="https://…"><button class="row-del" data-act="scDel" data-i="${gi}">🗑</button></div>`).join("");
+    editor=`<div class="scard" style="margin:0 0 14px;padding:13px 15px">${rows||'<p style="color:var(--tx-faint);font-size:.84em;margin:0 0 8px">Sin accesos. Agregá el primero.</p>'}<button class="btn-ghost add-row" data-act="scAddSec" data-id="${secId}">＋ Agregar acceso a esta sección</button></div>`;
+  }
+  return `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px"><div style="flex:1">${strip}${editor}</div>${toggle}</div>`;
+}
 function sectionView(secId){
-  const scs=state.shortcuts.filter(s=>(s.section||"dashboard")===secId);
-  const strip = scs.length
-    ? `<div class="shortcuts" style="margin-bottom:14px">${scs.map(s=>`<a class="sc-btn" href="${esc(s.url||'#')}" target="_blank"><span class="ic">${esc(s.ic)}</span>${esc(s.label)}</a>`).join("")}</div>`
-    : `<p style="color:var(--tx-faint);font-size:.82em;margin:0 0 14px">Sin accesos directos en esta sección — agregalos desde Configuración.</p>`;
   const tab=state.secTab;
   const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button></div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
   else body=sectionTasks(secId);
-  return `${strip}<div class="toolbar">${tabs}</div>${body}`;
+  return `${sectionShortcuts(secId)}<div class="toolbar">${tabs}</div>${body}`;
 }
 
 /* ---------- Tareas del área ---------- */
@@ -547,14 +556,27 @@ function taskFromCompromiso(i){ const r=getReu(state.reuSel); if(!r)return; cons
 function sectionReuniones(secId){
   if(state.reuSel) return reunionEditor(secId,getReu(state.reuSel));
   const list=state.reuniones.filter(r=>r.area===secId).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1);
-  const cards=list.map(r=>{ const nC=r.compromisos.length,nD=r.compromisos.filter(c=>c.done).length;
-    return `<button class="card" style="min-height:auto" data-act="reuOpen" data-id="${r.id}">
-      <div style="display:flex;justify-content:space-between;align-items:center;width:100%;gap:8px"><h4>${esc(r.titulo||'(sin título)')}</h4><span style="font-size:.82em;color:var(--tx-dim);white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</span></div>
-      <div class="stat" style="margin-top:2px">${r.participantes?esc(r.participantes):'<span style="color:var(--tx-faint)">Sin participantes</span>'}</div>
-      ${nC?`<div style="font-size:.82em;color:var(--tx-dim)">☑ ${nD}/${nC} compromisos</div>`:''}</button>`;
+  const view=state.reuView||"lista";
+  const toolbar=`<div class="toolbar"><div class="seg"><button class="${view==='lista'?'on':''}" data-act="reuView" data-id="lista">▤ Lista</button><button class="${view==='cards'?'on':''}" data-act="reuView" data-id="cards">▦ Tarjetas</button></div><div class="spacer"></div><button class="btn-primary" data-act="reuNew" data-id="${secId}">＋ Registrar reunión</button></div>`;
+  if(!list.length) return `${toolbar}<div class="table-wrap"><div class="empty">Todavía no registraste reuniones en esta área.</div></div>`;
+  if(view==='cards'){
+    const cards=list.map(r=>{ const nC=r.compromisos.length,nD=r.compromisos.filter(c=>c.done).length;
+      return `<button class="card" style="min-height:auto" data-act="reuOpen" data-id="${r.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;gap:8px"><h4>${esc(r.titulo||'(sin título)')}</h4><span style="font-size:.82em;color:var(--tx-dim);white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</span></div>
+        <div class="stat" style="margin-top:2px">${r.participantes?esc(r.participantes):'<span style="color:var(--tx-faint)">Sin participantes</span>'}</div>
+        ${nC?`<div style="font-size:.82em;color:var(--tx-dim)">☑ ${nD}/${nC} compromisos</div>`:''}</button>`;
+    }).join("");
+    return `${toolbar}<div class="cards">${cards}</div>`;
+  }
+  const rows=list.map(r=>{ const nC=r.compromisos.length,nD=r.compromisos.filter(c=>c.done).length;
+    return `<tr>
+      <td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td>
+      <td><button class="task-title" data-act="reuOpen" data-id="${r.id}">${esc(r.titulo||'(sin título)')}</button></td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.participantes?esc(r.participantes):'<span style="color:var(--tx-faint)">—</span>'}</td>
+      <td style="text-align:center">${nC?`${nD}/${nC}`:'<span style="color:var(--tx-faint)">—</span>'}</td>
+      <td class="date" style="white-space:nowrap">${r.proxima?fmt(r.proxima):'<span style="color:var(--tx-faint)">—</span>'}</td></tr>`;
   }).join("");
-  return `<div style="display:flex;margin-bottom:13px"><div style="flex:1"></div><button class="btn-primary" data-act="reuNew" data-id="${secId}">＋ Registrar reunión</button></div>
-    ${list.length?`<div class="cards">${cards}</div>`:'<div class="table-wrap"><div class="empty">Todavía no registraste reuniones en esta área.</div></div>'}`;
+  return `${toolbar}<div class="table-wrap"><table class="tasks" style="min-width:720px"><thead><tr><th>Fecha</th><th>Reunión</th><th>Participantes</th><th style="text-align:center">Compromisos</th><th>Próxima</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function reunionEditor(secId,r){
   if(!r){ state.reuSel=null; return sectionReuniones(secId); }
@@ -633,7 +655,10 @@ const ACTIONS = {
   saveRev:()=>saveReview(),
   taskFromNext:()=>taskFromNextStep(),
   // secciones operativas
-  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; render(); },
+  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); },
+  secScEdit:()=>{ state.secScEdit=!state.secScEdit; render(); },
+  scAddSec:(el)=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#",section:el.dataset.id}); scheduleSaveSettings(); render(); },
+  reuView:(el)=>{ state.reuView=el.dataset.id; render(); },
   addTaskSec:(el)=>addTaskForSection(el.dataset.id),
   vencAdd:(el)=>addVenc(el.dataset.id),
   vencF:(el)=>{ const v=getVenc(el.dataset.id); if(!v)return; v[el.dataset.f]=el.value; scheduleSaveVenc(v.id); if(el.tagName==='SELECT'||el.type==='date')render(); },
