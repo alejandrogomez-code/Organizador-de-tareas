@@ -68,6 +68,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[],
+  cal:{}, calLoaded:false, calLoading:false, calError:null,
 };
 
 /* ============================================================
@@ -499,11 +500,13 @@ function sectionShortcuts(secId){
 }
 function sectionView(secId){
   const tab=state.secTab;
-  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button></div>`;
+  const sgcTab = secId==='calidad' ? `<button class="${tab==='sgc'?'on':''}" data-act="secTab" data-id="sgc">✦ Sistema de Calidad</button>` : '';
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>${sgcTab}</div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
   else if(tab==='repo') body=sectionRepo(secId);
+  else if(tab==='sgc' && secId==='calidad') body=sectionSGC();
   else body=sectionTasks(secId);
   return `${sectionShortcuts(secId)}<div class="toolbar">${tabs}</div>${body}`;
 }
@@ -655,6 +658,38 @@ function sectionRepo(secId){
 }
 function addDoc(secId){ const d={id:crypto.randomUUID(),area:secId,titulo:"",categoria:"",url:"",files:[],nota:"",fecha:today()}; state.documentos.unshift(d); saveDocNow(d.id); render(); }
 
+/* ---------- Sistema de Calidad (reflejado desde la otra app, solo lectura) ---------- */
+async function loadCalidad(){
+  state.calLoading=true; state.calError=null; render();
+  try{
+    const h=await sb.from("cal_hallazgos").select("*"); if(h.error) throw h.error;
+    const m=await sb.from("cal_mejoras").select("*"); if(m.error) throw m.error;
+    const p=await sb.from("cal_procedimientos").select("*"); if(p.error) throw p.error;
+    state.cal={hallazgos:h.data||[],mejoras:m.data||[],procedimientos:p.data||[]};
+    state.calLoaded=true;
+  }catch(e){ state.calError=(e&&e.message)||String(e); }
+  state.calLoading=false; render();
+}
+function sectionSGC(){
+  if(state.calLoading) return `<div class="table-wrap"><div class="empty">Cargando datos de la app de Calidad…</div></div>`;
+  if(state.calError){
+    return `<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Conexión con la app de Calidad</h3>
+      <p style="font-size:.88em;color:var(--tx-dim);margin:0 0 8px">Todavía no se pueden leer los datos. Es normal si aún no corriste el archivo <b>calidad-fdw-conexion.sql</b> en Supabase (con tus datos de conexión completados).</p>
+      <p style="font-size:.8em;color:var(--st-urg);margin:0 0 12px">Detalle técnico: ${esc(state.calError)}</p>
+      <button class="btn-ghost" data-act="calReload">Reintentar</button></div>`;
+  }
+  const c=state.cal||{}; const H=c.hallazgos||[],M=c.mejoras||[],P=c.procedimientos||[];
+  const sevPill=s=>{ const t=(s||"").toLowerCase(); const col=/alt|crit|may/.test(t)?'st-urg':/med/.test(t)?'st-proc':'st-sin'; return `<span class="status-pill ${col}" style="cursor:default">${esc(s||'—')}</span>`; };
+  const hRows=H.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha_deteccion?fmt(r.fecha_deteccion):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.resumen||'—')}</td><td>${sevPill(r.severidad)}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
+  const mRows=M.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.mejora_realizada||r.notas||'—')}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
+  const pRows=P.map(r=>`<tr><td>${esc(r.procedimiento||'—')}</td><td>${r.area?esc(r.area):'—'}</td><td style="text-align:center">${r.version?esc(r.version):'—'}</td><td>${r.estado?esc(r.estado):'—'}</td><td class="date" style="white-space:nowrap">${r.fecha_proxima_revision?fmt(r.fecha_proxima_revision):'—'}</td><td style="text-align:center">${r.link?`<a class="icon-link" href="${esc(r.link)}" target="_blank">🔗</a>`:'—'}</td></tr>`).join("");
+  const block=(title,n,head,rows,empty)=>`<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">${title} <span style="color:var(--tx-faint);font-weight:400">· ${n}</span></h3><div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr>${head}</tr></thead><tbody>${rows||`<tr><td colspan="6"><div class="empty" style="padding:22px">${empty}</div></td></tr>`}</tbody></table></div></div>`;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde tu app de Calidad · solo lectura (se editan en esa app).</span><div style="flex:1"></div><button class="btn-ghost" data-act="calReload">↻ Actualizar</button></div>
+    ${block("Hallazgos sin cerrar",H.length,"<th>Detección</th><th>Área</th><th>Resumen</th><th>Severidad</th><th>Estado</th><th>Responsable</th>",hRows,"Sin hallazgos abiertos.")}
+    ${block("Mejoras en curso",M.length,"<th>Fecha</th><th>Área</th><th>Mejora</th><th>Estado</th><th>Responsable</th>",mRows,"Sin mejoras pendientes.")}
+    ${block("Procedimientos en revisión",P.length,"<th>Procedimiento</th><th>Área</th><th>Versión</th><th>Estado</th><th>Próx. revisión</th><th>Link</th>",pRows,"Sin procedimientos en revisión.")}`;
+}
+
 /* ============================================================
    CONFIG
    ============================================================ */
@@ -711,7 +746,8 @@ const ACTIONS = {
   saveRev:()=>saveReview(),
   taskFromNext:()=>taskFromNextStep(),
   // secciones operativas
-  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); },
+  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.calLoaded && !state.calLoading) loadCalidad(); },
+  calReload:()=>loadCalidad(),
   secScEdit:()=>{ state.secScEdit=!state.secScEdit; render(); },
   scAddSec:(el)=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#",section:el.dataset.id}); scheduleSaveSettings(); render(); },
   reuView:(el)=>{ state.reuView=el.dataset.id; render(); },
