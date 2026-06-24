@@ -38,22 +38,36 @@ const PALETTES = {
 };
 function applyTheme(key){ const p = PALETTES[key] || PALETTES.grafito; for(const[k,v] of Object.entries(p.vars)) document.documentElement.style.setProperty(k,v); state.theme = PALETTES[key]?key:"grafito"; }
 
+/* ---------- Secciones operativas ---------- */
+// Qué áreas (de Seguimiento de Tareas) agrupa cada sección.
+const SECTION_AREAS = {
+  admin:["Administración","Contabilidad","Finanzas"],
+  calidad:["Calidad"],
+  logistica:["Logística","Compras"],
+  sistemas:["Sistemas"],
+};
+const OPS_ENABLED = ["admin","calidad"]; // secciones ya construidas
+const VENC_TIPO = ["Impuesto","Contrato","Licencia","Seguro","Certificación","Servicio","Pago","Habilitación","Auditoría","Otro"];
+const PERIODICIDAD = [["unica","Única vez"],["mensual","Mensual"],["bimestral","Bimestral"],["trimestral","Trimestral"],["cuatrimestral","Cuatrimestral"],["semestral","Semestral"],["anual","Anual"]];
+const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
+
 /* ============================================================
    Estado
    ============================================================ */
 const DEFAULTS = {
-  areas:["Administración","Marketing","Calidad","Logística","Sistemas","Compras"],
+  areas:["Administración","Contabilidad","Finanzas","Marketing","Calidad","Logística","Compras","Sistemas"],
   responsables:["Alejandro","Diego","Leandro","Claudio"],
-  shortcuts:[{ic:"📅",label:"Notion Calendar",url:"#"},{ic:"✉️",label:"Correo",url:"#"},{ic:"🗂️",label:"Notion",url:"#"},{ic:"📊",label:"Odoo",url:"#"}],
+  shortcuts:[{ic:"📅",label:"Notion Calendar",url:"#",section:"dashboard"},{ic:"✉️",label:"Correo",url:"#",section:"dashboard"},{ic:"🗂️",label:"Notion",url:"#",section:"dashboard"},{ic:"📊",label:"Odoo",url:"#",section:"dashboard"}],
   theme:"grafito",
 };
 const state = {
   view:"dashboard", taskView:"tabla", scale:1, seq:1,
   sort:{col:"n",dir:"asc"}, group:"", showDone:false,
   objSel:null, objReviewMonth:null, objFilterArea:"", justSavedReview:null,
+  secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null,
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
-  tasks:[],
+  tasks:[], vencimientos:[], reuniones:[],
 };
 
 /* ============================================================
@@ -81,6 +95,10 @@ function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,t
 function serObj(o){ return {id:o.id,user_id:UID,tag:o.tag||"",name:o.name||"",area:o.area||null,owner:o.owner||null,status:o.status||"En curso",indicators:o.indicators||[],plan:o.plan||[],reviews:o.reviews||[]}; }
 function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,detail:r.detail||"",recur:r.recur||"",subs:r.subs||[]}; }
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
+function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
+function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
+function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],proxima:r.proxima||null}; }
+function deReu(r){ return {id:r.id,area:r.area||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],proxima:r.proxima||""}; }
 
 const timers = {};
 function db(){ return sb && UID; }
@@ -92,6 +110,14 @@ async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)re
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
 async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(error)toast("No se pudo guardar config: "+error.message); }
+function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
+function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
+async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteVencDb(id){ if(!db())return; const {error}=await sb.from("vencimientos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+function getReu(id){ return state.reuniones.find(r=>r.id===id); }
+function scheduleSaveReu(id){ if(!db())return; clearTimeout(timers["r"+id]); timers["r"+id]=setTimeout(()=>saveReuNow(id),500); }
+async function saveReuNow(id){ if(!db())return; const r=getReu(id); if(!r)return; const {error}=await sb.from("reuniones").upsert(serReu(r)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteReuDb(id){ if(!db())return; const {error}=await sb.from("reuniones").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 
 async function loadAll(){
   // settings
@@ -104,6 +130,10 @@ async function loadAll(){
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
   // objetivos
   { const {data}=await sb.from("objetivos").select("*").eq("user_id",UID).order("inserted_at",{ascending:true}); state.objetivos=(data||[]).map(deObj); }
+  // vencimientos
+  { const {data,error}=await sb.from("vencimientos").select("*").eq("user_id",UID).order("due",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Vencimientos en Supabase."); state.vencimientos=(data||[]).map(deVenc); }
+  // reuniones
+  { const {data}=await sb.from("reuniones").select("*").eq("user_id",UID).order("fecha",{ascending:false}); state.reuniones=(data||[]).map(deReu); }
   state.seq = state.tasks.reduce((m,t)=>Math.max(m,t.n||0),0)+1;
 }
 
@@ -115,7 +145,7 @@ function renderNav(){
     + `<div class="sep"></div><a href="#" class="${state.view==='config'?'active':''}" data-go="config"><span class="ic">⚙</span>Configuración</a>`;
   $("#nav").querySelectorAll("a[data-go]").forEach(a=>a.onclick=e=>{ e.preventDefault(); go(a.dataset.go); });
 }
-function go(id){ state.view=id; state.objSel=null; render(); }
+function go(id){ state.view=id; state.objSel=null; state.secTab="tareas"; state.reuSel=null; render(); }
 function setScale(dir){ if(dir===0)state.scale=1; else state.scale=Math.min(1.35,Math.max(.82,state.scale+dir*0.09)); document.documentElement.style.setProperty("--scale",state.scale.toFixed(2)); }
 
 function render(){
@@ -129,6 +159,7 @@ function render(){
   else if(state.view==="tareas"){ c.innerHTML=viewTasks(); paintTasks(); }
   else if(state.view==="objetivos") c.innerHTML=state.objSel?objDetail(getObjById(state.objSel)):objList();
   else if(state.view==="config") c.innerHTML=viewConfig();
+  else if(OPS_ENABLED.includes(state.view)) c.innerHTML=sectionView(state.view);
   else c.innerHTML=viewPlaceholder(sec);
   bindContent();
 }
@@ -151,17 +182,28 @@ function bindContent(){
    ============================================================ */
 function viewDashboard(){
   const pend=state.tasks.filter(t=>!["comp","desc"].includes(t.status)).length;
-  const sc=state.shortcuts.map(s=>`<a class="sc-btn" href="${esc(s.url||'#')}" target="_blank"><span class="ic">${esc(s.ic)}</span>${esc(s.label)}</a>`).join("") || `<span style="color:var(--tx-faint);font-size:.86em">Agregá accesos directos desde Configuración.</span>`;
+  const sc=state.shortcuts.filter(s=>(s.section||"dashboard")==="dashboard").map(s=>`<a class="sc-btn" href="${esc(s.url||'#')}" target="_blank"><span class="ic">${esc(s.ic)}</span>${esc(s.label)}</a>`).join("") || `<span style="color:var(--tx-faint);font-size:.86em">Agregá accesos directos desde Configuración.</span>`;
+  // próxima reunión real (fecha futura o "próxima reunión" cargada)
+  const up=[]; state.reuniones.forEach(r=>{ if(r.fecha&&r.fecha>=today())up.push({d:r.fecha,t:r.titulo||'Reunión',a:r.area}); if(r.proxima&&r.proxima>=today())up.push({d:r.proxima,t:(r.titulo?'Seguimiento: '+r.titulo:'Próxima reunión'),a:r.area}); });
+  up.sort((a,b)=>a.d<b.d?-1:1);
+  const nm=up[0];
+  const secName=id=>{ const s=SECTIONS.find(x=>x.id===id); return s?s.label:''; };
+  let meetingWidget;
+  if(nm){ const dd=new Date(nm.d+"T00:00"); const dnum=dd.getDate(); const mlbl=dd.toLocaleDateString("es-AR",{month:"short"});
+    meetingWidget=`<h3>Próxima reunión</h3><div class="meeting"><div class="when"><b>${dnum}</b><span>${esc(mlbl)}</span></div><div class="info"><b>${esc(nm.t)}</b><p>${esc(secName(nm.a))}</p><span class="src">🗓 ${fmt(nm.d)}</span></div></div>`;
+  } else {
+    meetingWidget=`<h3>Próxima reunión</h3><div style="color:var(--tx-faint);font-size:.9em;padding:6px 0">No hay reuniones próximas cargadas. Registralas en cada sección.</div>`;
+  }
   const cards=SECTIONS.filter(s=>s.id!=="dashboard").map(s=>{
     const cs=CARD_STYLE[s.id]||{bg:"#eef0f3",fg:"#5b6471"};
     let stat=`<div class="stat" style="color:var(--tx-faint)">En construcción</div>`;
     if(s.id==="tareas")stat=`<div class="stat"><b>${pend}</b> pendientes</div>`;
     else if(s.id==="objetivos")stat=`<div class="stat"><b>${state.objetivos.length}</b> en seguimiento</div>`;
+    else if(OPS_ENABLED.includes(s.id)){ const areas=SECTION_AREAS[s.id]||[]; const tp=state.tasks.filter(t=>areas.includes(t.area)&&!["comp","desc"].includes(t.status)).length; const vp=state.vencimientos.filter(v=>v.area===s.id&&v.status!=='ok'&&v.due&&v.due<today()).length; stat=`<div class="stat"><b>${tp}</b> tareas · ${vp?`<b style="color:var(--st-urg)">${vp}</b> vencidas`:'0 vencidas'}</div>`; }
     return `<button class="card" data-act="goCard" data-id="${s.id}"><div class="ico" style="background:${cs.bg};color:${cs.fg}">${s.ic}</div><h4>${esc(s.label)}</h4>${stat}</button>`;
   }).join("");
   return `<div class="dash-top">
-    <div class="widget"><h3>Próxima reunión <span class="badge-soon">en 2 h</span></h3>
-      <div class="meeting"><div class="when"><b>14</b><span>Jun · 16h</span></div><div class="info"><b>Revisión semanal de equipo</b><p>Sala virtual · 45 min · con Diego, Leandro</p><span class="src">🔗 Sincronizado con Notion Calendar</span></div></div></div>
+    <div class="widget">${meetingWidget}</div>
     <div class="widget"><h3>Accesos directos</h3><div class="shortcuts">${sc}</div></div>
   </div><div class="section-h">Secciones</div><div class="cards">${cards}</div>`;
 }
@@ -263,7 +305,8 @@ function wireKanban(){
 }
 function nextDue(dateStr,recur){ const d=dateStr?new Date(dateStr+"T00:00"):new Date(); switch(recur){ case 'diaria':d.setDate(d.getDate()+1);break; case 'semanal':d.setDate(d.getDate()+7);break; case 'quincenal':d.setDate(d.getDate()+14);break; case 'mensual':d.setMonth(d.getMonth()+1);break; case 'trimestral':d.setMonth(d.getMonth()+3);break; case 'anual':d.setFullYear(d.getFullYear()+1);break; default:return dateStr||""; } return d.toISOString().slice(0,10); }
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
-function setField(id,field,val){ const t=state.tasks.find(x=>x.id===id); if(!t)return; const prev=t[field]; t[field]=val; if(field==='status'&&val==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(id); paintTasks(); }
+function refreshTasks(){ if(state.view==='tareas') paintTasks(); else render(); }
+function setField(id,field,val){ const t=state.tasks.find(x=>x.id===id); if(!t)return; const prev=t[field]; t[field]=val; if(field==='status'&&val==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(id); refreshTasks(); }
 function addTask(){ const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:"",resp:"",obj:"",url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); paintTasks(); openModal(t.id); }
 function newTaskForObj(tag){ const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:"",resp:"",obj:tag,url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); openModal(t.id); }
 
@@ -315,7 +358,7 @@ function openModal(id){
   $("#mFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; set("file",f.name); openModal(id); };
   $("#overlay").classList.add("show");
 }
-function closeModal(){ $("#overlay").classList.remove("show"); modalId=null; if(state.view==='objetivos'&&state.objSel)render(); else if(state.view==='tareas')paintTasks(); }
+function closeModal(){ $("#overlay").classList.remove("show"); modalId=null; if(state.view==='tareas')paintTasks(); else render(); }
 
 /* ============================================================
    OBJETIVOS
@@ -410,12 +453,138 @@ function reviewSection(o){
 }
 
 /* ============================================================
+   SECCIONES OPERATIVAS (Administración, Calidad, …)
+   ============================================================ */
+function sectionView(secId){
+  const scs=state.shortcuts.filter(s=>(s.section||"dashboard")===secId);
+  const strip = scs.length
+    ? `<div class="shortcuts" style="margin-bottom:14px">${scs.map(s=>`<a class="sc-btn" href="${esc(s.url||'#')}" target="_blank"><span class="ic">${esc(s.ic)}</span>${esc(s.label)}</a>`).join("")}</div>`
+    : `<p style="color:var(--tx-faint);font-size:.82em;margin:0 0 14px">Sin accesos directos en esta sección — agregalos desde Configuración.</p>`;
+  const tab=state.secTab;
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button></div>`;
+  let body;
+  if(tab==='venc') body=sectionVenc(secId);
+  else if(tab==='reu') body=sectionReuniones(secId);
+  else body=sectionTasks(secId);
+  return `${strip}<div class="toolbar">${tabs}</div>${body}`;
+}
+
+/* ---------- Tareas del área ---------- */
+function sectionTasks(secId){
+  const areas=SECTION_AREAS[secId]||[];
+  let list=state.tasks.filter(t=>areas.includes(t.area));
+  if(!state.showDone) list=list.filter(t=>t.status!=='comp'&&t.status!=='desc');
+  list=[...list].sort((a,b)=>(a.due||'9999-99-99')<(b.due||'9999-99-99')?-1:1);
+  const rows=list.map(t=>{ const st=stMeta(t.status); return `<tr>
+    <td class="num">${t.n}</td>
+    <td><button class="task-title" data-act="open" data-id="${t.id}">${esc(t.title)}</button></td>
+    <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select></td>
+    <td class="date ${dueClass(t.due)}">${fmt(t.due)}</td>
+    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="area">${optionList(state.areas,t.area,"—")}</select></td>
+    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="resp">${optionList(state.responsables,t.resp,"—")}</select></td>
+    <td>${t.obj?`<span class="tag">${esc(t.obj)}</span>`:'<span style="color:var(--tx-faint)">—</span>'}</td></tr>`; }).join("");
+  return `<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:.82em;color:var(--tx-faint)">Áreas incluidas: ${areas.map(esc).join(' · ')}</span>
+      <div style="flex:1"></div>
+      <button class="btn-ghost ${state.showDone?'on':''}" data-act="toggleDone">${state.showDone?'Ocultar':'Ver'} completadas</button>
+      <button class="btn-primary" data-act="addTaskSec" data-id="${secId}">＋ Nueva tarea</button>
+    </div>
+    <div class="table-wrap"><table class="tasks" style="min-width:780px"><thead><tr><th>N°</th><th>Tarea</th><th>Estado</th><th>Vence</th><th>Área</th><th>Responsable</th><th>Objetivo</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7"><div class="empty">No hay tareas en estas áreas. Creá una, o asigná una de estas áreas a tus tareas en Seguimiento.</div></td></tr>'}</tbody></table></div>`;
+}
+function addTaskForSection(secId){ const areas=SECTION_AREAS[secId]||[]; const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:areas[0]||"",resp:"",obj:"",url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); render(); openModal(t.id); }
+
+/* ---------- Vencimientos ---------- */
+function nextVencDate(due,per){ const d=due?new Date(due+"T00:00"):new Date(); switch(per){ case 'mensual':d.setMonth(d.getMonth()+1);break; case 'bimestral':d.setMonth(d.getMonth()+2);break; case 'trimestral':d.setMonth(d.getMonth()+3);break; case 'cuatrimestral':d.setMonth(d.getMonth()+4);break; case 'semestral':d.setMonth(d.getMonth()+6);break; case 'anual':d.setFullYear(d.getFullYear()+1);break; default:return null; } return d.toISOString().slice(0,10); }
+function addVenc(secId){ const v={id:crypto.randomUUID(),area:secId,concepto:"",tipo:"Impuesto",due:"",periodicidad:"mensual",resp:"",status:"pend",url:"",nota:""}; state.vencimientos.push(v); saveVencNow(v.id); render(); }
+function toggleVenc(id){ const v=getVenc(id); if(!v)return;
+  if(v.status!=='ok'){ v.status='ok';
+    if(v.periodicidad&&v.periodicidad!=='unica'){ const nd=nextVencDate(v.due,v.periodicidad); if(nd){ const nv={id:crypto.randomUUID(),area:v.area,concepto:v.concepto,tipo:v.tipo,due:nd,periodicidad:v.periodicidad,resp:v.resp,status:'pend',url:v.url,nota:v.nota}; state.vencimientos.push(nv); saveVencNow(nv.id); toast("Próximo vencimiento generado: "+fmt(nd)); } }
+  } else v.status='pend';
+  scheduleSaveVenc(id); render();
+}
+function vencRow(v){
+  const dueCls=v.status==='ok'?'':dueClass(v.due);
+  const estado=v.status==='ok'
+    ? `<button class="status-pill st-comp" data-act="vencToggle" data-id="${v.id}">Cumplido</button>`
+    : `<button class="status-pill st-proc" data-act="vencToggle" data-id="${v.id}">Pendiente</button>`;
+  return `<tr>
+    <td><input class="cell-edit" style="min-width:160px" value="${esc(v.concepto)}" data-act="vencF" data-id="${v.id}" data-f="concepto" placeholder="Qué vence"></td>
+    <td><select class="cell-edit" data-act="vencF" data-id="${v.id}" data-f="tipo">${VENC_TIPO.map(t=>`<option ${t===v.tipo?'selected':''}>${t}</option>`).join("")}</select></td>
+    <td><input type="date" class="cell-edit ${dueCls}" value="${esc(v.due)}" data-act="vencF" data-id="${v.id}" data-f="due"></td>
+    <td><select class="cell-edit" data-act="vencF" data-id="${v.id}" data-f="periodicidad">${PERIODICIDAD.map(p=>`<option value="${p[0]}" ${p[0]===v.periodicidad?'selected':''}>${p[1]}</option>`).join("")}</select></td>
+    <td><select class="cell-edit" data-act="vencF" data-id="${v.id}" data-f="resp">${optionList(state.responsables,v.resp,"—")}</select></td>
+    <td><input class="cell-edit" style="min-width:150px" value="${esc(v.nota)}" data-act="vencF" data-id="${v.id}" data-f="nota" placeholder="Nota / link"></td>
+    <td style="text-align:center">${estado}</td>
+    <td style="text-align:center"><button class="row-del" data-act="vencDel" data-id="${v.id}">🗑</button></td></tr>`;
+}
+function sectionVenc(secId){
+  const all=state.vencimientos.filter(v=>v.area===secId);
+  const f=state.vencFilter;
+  let list=all.filter(v=>(!f.tipo||v.tipo===f.tipo)&&(!f.status||v.status===f.status));
+  list=[...list].sort((a,b)=>{ const av=a.status==='ok'?1:0,bv=b.status==='ok'?1:0; if(av!==bv)return av-bv; return (a.due||'9999-99-99')<(b.due||'9999-99-99')?-1:1; });
+  const t0=today(), in30=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+  const nVenc=all.filter(v=>v.status!=='ok'&&v.due&&v.due<t0).length;
+  const nProx=all.filter(v=>v.status!=='ok'&&v.due&&v.due>=t0&&v.due<=in30).length;
+  const chip=(txt,bg,fg)=>`<span style="background:${bg};color:${fg};border-radius:20px;padding:3px 11px;font-size:.84em;font-weight:600">${txt}</span>`;
+  const rows=list.map(vencRow).join("");
+  return `<div style="display:flex;gap:9px;align-items:center;margin-bottom:13px;flex-wrap:wrap">
+      ${chip(nVenc+' vencidas','#fdecec','#c2353a')}${chip(nProx+' en 30 días','#fdf3e2','#b4760a')}${chip(all.length+' en total','var(--line-2)','var(--tx-dim)')}
+      <div style="flex:1"></div>
+      <select class="inp" data-act="vencFilter" data-id="tipo"><option value="">Todos los tipos</option>${VENC_TIPO.map(t=>`<option ${f.tipo===t?'selected':''}>${t}</option>`).join("")}</select>
+      <select class="inp" data-act="vencFilter" data-id="status"><option value="">Todos</option><option value="pend" ${f.status==='pend'?'selected':''}>Pendientes</option><option value="ok" ${f.status==='ok'?'selected':''}>Cumplidos</option></select>
+      <button class="btn-primary" data-act="vencAdd" data-id="${secId}">＋ Nuevo vencimiento</button>
+    </div>
+    <div class="table-wrap"><table class="tasks" style="min-width:920px"><thead><tr><th>Concepto</th><th>Tipo</th><th>Vence</th><th>Periodicidad</th><th>Responsable</th><th>Nota / link</th><th style="text-align:center">Estado</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8"><div class="empty">Sin vencimientos cargados. Agregá impuestos, contratos, licencias, seguros, certificaciones…</div></td></tr>'}</tbody></table></div>
+    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">Al marcar como <b>Cumplido</b> uno que se repite, se genera solo el próximo con la fecha corrida.</p>`;
+}
+
+/* ---------- Reuniones ---------- */
+function addReunion(secId){ const r={id:crypto.randomUUID(),area:secId,fecha:today(),titulo:"",participantes:"",temas:"",decisiones:"",compromisos:[],proxima:""}; state.reuniones.unshift(r); saveReuNow(r.id); state.reuSel=r.id; render(); }
+function readReuForm(r){ const g=id=>{const e=$("#"+id);return e?e.value:undefined;}; const map={reu_titulo:'titulo',reu_fecha:'fecha',reu_part:'participantes',reu_temas:'temas',reu_dec:'decisiones',reu_prox:'proxima'}; for(const[el,fld] of Object.entries(map)){ const v=g(el); if(v!==undefined)r[fld]=v; } }
+function taskFromCompromiso(i){ const r=getReu(state.reuSel); if(!r)return; const c=r.compromisos[i]; if(!c||!c.t.trim()){toast("Escribí el compromiso primero");return;} const areas=SECTION_AREAS[r.area]||[]; const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:c.t.trim(),status:"sin",due:"",area:areas[0]||"",resp:"",obj:"",url:"",file:null,detail:"Compromiso de reunión: "+(r.titulo||fmt(r.fecha)),recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); c.taskId=t.id; readReuForm(r); scheduleSaveReu(r.id); render(); toast("Tarea creada en Seguimiento"); }
+function sectionReuniones(secId){
+  if(state.reuSel) return reunionEditor(secId,getReu(state.reuSel));
+  const list=state.reuniones.filter(r=>r.area===secId).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1);
+  const cards=list.map(r=>{ const nC=r.compromisos.length,nD=r.compromisos.filter(c=>c.done).length;
+    return `<button class="card" style="min-height:auto" data-act="reuOpen" data-id="${r.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;width:100%;gap:8px"><h4>${esc(r.titulo||'(sin título)')}</h4><span style="font-size:.82em;color:var(--tx-dim);white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</span></div>
+      <div class="stat" style="margin-top:2px">${r.participantes?esc(r.participantes):'<span style="color:var(--tx-faint)">Sin participantes</span>'}</div>
+      ${nC?`<div style="font-size:.82em;color:var(--tx-dim)">☑ ${nD}/${nC} compromisos</div>`:''}</button>`;
+  }).join("");
+  return `<div style="display:flex;margin-bottom:13px"><div style="flex:1"></div><button class="btn-primary" data-act="reuNew" data-id="${secId}">＋ Registrar reunión</button></div>
+    ${list.length?`<div class="cards">${cards}</div>`:'<div class="table-wrap"><div class="empty">Todavía no registraste reuniones en esta área.</div></div>'}`;
+}
+function reunionEditor(secId,r){
+  if(!r){ state.reuSel=null; return sectionReuniones(secId); }
+  const comps=r.compromisos.map((c,i)=>`<div class="sub ${c.done?'done':''}"><input type="checkbox" ${c.done?'checked':''} data-act="reuCompChk" data-i="${i}"><input class="sx" value="${esc(c.t)}" data-act="reuCompTxt" data-i="${i}"><button class="btn-ghost" style="padding:2px 8px;font-size:.76em" data-act="reuCompTask" data-i="${i}" title="Crear tarea en Seguimiento">${c.taskId?'✓ tarea':'＋ tarea'}</button><button class="del" data-act="reuCompDel" data-i="${i}" style="opacity:1">🗑</button></div>`).join("");
+  return `<button class="btn-ghost" data-act="reuBack" style="margin-bottom:14px">← Volver a reuniones</button>
+  <div class="scard">
+    <div class="m-grid" style="grid-template-columns:1fr 170px">
+      <div class="m-field"><label>Título / motivo</label><input id="reu_titulo" value="${esc(r.titulo)}" data-act="reuF" data-f="titulo" placeholder="Ej. Revisión semanal de operaciones"></div>
+      <div class="m-field"><label>Fecha</label><input id="reu_fecha" type="date" value="${esc(r.fecha)}" data-act="reuF" data-f="fecha"></div>
+    </div>
+    <div class="m-field" style="margin-top:11px"><label>Participantes</label><input id="reu_part" value="${esc(r.participantes)}" data-act="reuF" data-f="participantes" placeholder="Nombres separados por coma"></div>
+    <div class="m-field" style="margin-top:11px"><label>Temas tratados</label><textarea id="reu_temas" class="m-detail" data-act="reuF" data-f="temas" placeholder="Orden del día / lo conversado">${esc(r.temas)}</textarea></div>
+    <div class="m-field" style="margin-top:11px"><label>Decisiones</label><textarea id="reu_dec" class="m-detail" data-act="reuF" data-f="decisiones" placeholder="Qué se decidió">${esc(r.decisiones)}</textarea></div>
+    <div style="margin-top:14px"><div class="m-block-h"><span>Compromisos / acciones</span><span class="sub-prog">${r.compromisos.filter(c=>c.done).length}/${r.compromisos.length}</span></div>
+      <div class="subs">${comps||'<p style="color:var(--tx-faint);font-size:.84em;margin:0">Sin compromisos. Agregá abajo.</p>'}</div>
+      <div class="sub-add"><input id="reu_newcomp" placeholder="Agregar compromiso y Enter…" data-act="reuCompAdd" data-ev="keydown"></div>
+      <p style="color:var(--tx-faint);font-size:.78em;margin:6px 0 0">“＋ tarea” crea una tarea en Seguimiento, en el área de esta sección.</p></div>
+    <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
+    <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="reuBack">Listo</button></div>
+  </div>`;
+}
+
+/* ============================================================
    CONFIG
    ============================================================ */
 function viewConfig(){
   const chips=(arr,kind)=>arr.map((a,i)=>`<span class="chip">${esc(a)}<button data-act="cfgDel" data-kind="${kind}" data-i="${i}">✕</button></span>`).join("");
   const objChips=state.objetivos.map((o,i)=>`<span class="chip">${esc(o.tag)} · ${esc(o.name)}<button data-act="cfgDel" data-kind="obj" data-i="${i}">✕</button></span>`).join("");
-  const scRows=state.shortcuts.map((s,i)=>`<div class="sc-edit"><input class="inp" style="width:46px;text-align:center" value="${esc(s.ic)}" data-act="scF" data-i="${i}" data-f="ic"><input class="inp" style="flex:0 0 150px" value="${esc(s.label)}" data-act="scF" data-i="${i}" data-f="label" placeholder="Nombre"><input class="inp" style="flex:1" value="${esc(s.url)}" data-act="scF" data-i="${i}" data-f="url" placeholder="https://…"><button class="row-del" data-act="scDel" data-i="${i}">🗑</button></div>`).join("");
+  const scSecOpts=(sel)=>{ const all=[["dashboard","Dashboard"]].concat(SECTIONS.filter(s=>s.id!=="dashboard").map(s=>[s.id,s.label])); return all.map(([v,l])=>`<option value="${v}" ${ (sel||"dashboard")===v?'selected':''}>${esc(l)}</option>`).join(""); };
+  const scRows=state.shortcuts.map((s,i)=>`<div class="sc-edit"><input class="inp" style="width:46px;text-align:center" value="${esc(s.ic)}" data-act="scF" data-i="${i}" data-f="ic"><input class="inp" style="flex:0 0 140px" value="${esc(s.label)}" data-act="scF" data-i="${i}" data-f="label" placeholder="Nombre"><input class="inp" style="flex:1;min-width:120px" value="${esc(s.url)}" data-act="scF" data-i="${i}" data-f="url" placeholder="https://…"><select class="inp" style="flex:0 0 150px" data-act="scF" data-i="${i}" data-f="section">${scSecOpts(s.section)}</select><button class="row-del" data-act="scDel" data-i="${i}">🗑</button></div>`).join("");
   const sw=Object.entries(PALETTES).map(([k,p])=>`<button class="swatch ${state.theme===k?'on':''}" data-act="theme" data-k="${k}"><div class="prev"><i style="background:${p.vars['--sidebar']}"></i><i style="background:${p.vars['--accent']}"></i><i style="background:${p.vars['--bg']}"></i><i style="background:${p.vars['--panel']}"></i></div><div class="nm">${p.name}</div></button>`).join("");
   return `<div class="cfg-grid">
     <div class="cfg-card"><h3>Áreas</h3><div class="chip-list">${chips(state.areas,'area')}</div><div class="cfg-add"><input id="cfgArea" placeholder="Nueva área…" data-act="cfgAddKey" data-ev="keydown" data-kind="area"><button data-act="cfgAdd" data-kind="area">＋</button></div></div>
@@ -423,10 +592,10 @@ function viewConfig(){
     <div class="cfg-card"><h3>Objetivos (tags)</h3><div class="chip-list">${objChips}</div><div class="cfg-add"><input id="cfgObjTag" placeholder="TAG" style="max-width:90px"><input id="cfgObjName" placeholder="Nombre del objetivo…"><button data-act="cfgAdd" data-kind="obj">＋</button></div></div>
   </div>
   <div class="scard" style="margin-top:16px"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Paleta de colores</h3><div class="swatches">${sw}</div></div>
-  <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Accesos directos del dashboard</h3>
+  <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Accesos directos</h3>
     ${scRows||'<p style="color:var(--tx-faint);font-size:.86em">Sin accesos directos.</p>'}
     <button class="btn-ghost add-row" data-act="scAdd">＋ Agregar acceso directo</button>
-    <p style="color:var(--tx-faint);font-size:.8em;margin:10px 0 0">El primer campo es el ícono (podés pegar un emoji). Se muestran en el dashboard.</p></div>
+    <p style="color:var(--tx-faint);font-size:.8em;margin:10px 0 0">El primer campo es el ícono (podés pegar un emoji). Con el último menú elegís en qué sección aparece (Dashboard, Administración, Calidad, etc.).</p></div>
   <p style="color:var(--tx-faint);font-size:.82em;margin-top:14px">Las áreas y responsables alimentan los menús de tareas y objetivos.</p>`;
 }
 
@@ -463,12 +632,30 @@ const ACTIONS = {
   delRev:(el,e)=>{ e.stopPropagation(); const o=getObjById(state.objSel); o.reviews=o.reviews.filter(r=>r.month!==el.dataset.m); scheduleSaveObj(o.id); render(); },
   saveRev:()=>saveReview(),
   taskFromNext:()=>taskFromNextStep(),
+  // secciones operativas
+  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; render(); },
+  addTaskSec:(el)=>addTaskForSection(el.dataset.id),
+  vencAdd:(el)=>addVenc(el.dataset.id),
+  vencF:(el)=>{ const v=getVenc(el.dataset.id); if(!v)return; v[el.dataset.f]=el.value; scheduleSaveVenc(v.id); if(el.tagName==='SELECT'||el.type==='date')render(); },
+  vencToggle:(el)=>toggleVenc(el.dataset.id),
+  vencDel:(el)=>{ const id=el.dataset.id; state.vencimientos=state.vencimientos.filter(v=>v.id!==id); deleteVencDb(id); render(); },
+  vencFilter:(el)=>{ state.vencFilter[el.dataset.id]=el.value; render(); },
+  reuNew:(el)=>addReunion(el.dataset.id),
+  reuOpen:(el)=>{ state.reuSel=el.dataset.id; render(); },
+  reuBack:()=>{ state.reuSel=null; render(); },
+  reuDel:(el)=>{ const id=el.dataset.id; state.reuniones=state.reuniones.filter(x=>x.id!==id); deleteReuDb(id); state.reuSel=null; render(); },
+  reuF:(el)=>{ const r=getReu(state.reuSel); if(!r)return; r[el.dataset.f]=el.value; scheduleSaveReu(r.id); },
+  reuCompTxt:(el)=>{ const r=getReu(state.reuSel); if(!r)return; r.compromisos[+el.dataset.i].t=el.value; scheduleSaveReu(r.id); },
+  reuCompChk:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos[+el.dataset.i].done=el.checked; scheduleSaveReu(r.id); render(); },
+  reuCompDel:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
+  reuCompAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.push({t:v,done:false,taskId:null}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newcomp"); if(n)n.focus();},10); },
+  reuCompTask:(el)=>taskFromCompromiso(+el.dataset.i),
   // config
   cfgAdd:(el)=>cfgAdd(el.dataset.kind),
   cfgAddKey:(el,e)=>{ if(e.key==='Enter')cfgAdd(el.dataset.kind); },
   cfgDel:(el)=>cfgDel(el.dataset.kind,+el.dataset.i),
   scF:(el)=>{ state.shortcuts[+el.dataset.i][el.dataset.f]=el.value; scheduleSaveSettings(); },
-  scAdd:()=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#"}); scheduleSaveSettings(); render(); },
+  scAdd:()=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#",section:"dashboard"}); scheduleSaveSettings(); render(); },
   scDel:(el)=>{ state.shortcuts.splice(+el.dataset.i,1); scheduleSaveSettings(); render(); },
   theme:(el)=>{ applyTheme(el.dataset.k); scheduleSaveSettings(); render(); },
 };
