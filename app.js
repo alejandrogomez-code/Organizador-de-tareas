@@ -67,7 +67,7 @@ const state = {
   secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
-  tasks:[], vencimientos:[], reuniones:[],
+  tasks:[], vencimientos:[], reuniones:[], documentos:[],
 };
 
 /* ============================================================
@@ -91,14 +91,16 @@ function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("sh
 /* ============================================================
    Persistencia (Supabase)
    ============================================================ */
-function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,detail:t.detail||null,recur:t.recur||null,subs:t.subs||[]}; }
+function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,files:t.files||[],detail:t.detail||null,recur:t.recur||null,subs:t.subs||[]}; }
 function serObj(o){ return {id:o.id,user_id:UID,tag:o.tag||"",name:o.name||"",area:o.area||null,owner:o.owner||null,status:o.status||"En curso",indicators:o.indicators||[],plan:o.plan||[],reviews:o.reviews||[]}; }
-function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,detail:r.detail||"",recur:r.recur||"",subs:r.subs||[]}; }
+function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,files:r.files||[],detail:r.detail||"",recur:r.recur||"",subs:r.subs||[]}; }
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
-function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],proxima:r.proxima||null}; }
-function deReu(r){ return {id:r.id,area:r.area||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],proxima:r.proxima||""}; }
+function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||null}; }
+function deReu(r){ return {id:r.id,area:r.area||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
+function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titulo||"",categoria:d.categoria||null,url:d.url||null,files:d.files||[],nota:d.nota||null,fecha:d.fecha||null}; }
+function deDoc(r){ return {id:r.id,area:r.area||"",titulo:r.titulo||"",categoria:r.categoria||"",url:r.url||"",files:r.files||[],nota:r.nota||"",fecha:r.fecha||""}; }
 
 const timers = {};
 function db(){ return sb && UID; }
@@ -118,6 +120,27 @@ function getReu(id){ return state.reuniones.find(r=>r.id===id); }
 function scheduleSaveReu(id){ if(!db())return; clearTimeout(timers["r"+id]); timers["r"+id]=setTimeout(()=>saveReuNow(id),500); }
 async function saveReuNow(id){ if(!db())return; const r=getReu(id); if(!r)return; const {error}=await sb.from("reuniones").upsert(serReu(r)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteReuDb(id){ if(!db())return; const {error}=await sb.from("reuniones").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+function getDoc(id){ return state.documentos.find(d=>d.id===id); }
+function scheduleSaveDoc(id){ if(!db())return; clearTimeout(timers["d"+id]); timers["d"+id]=setTimeout(()=>saveDocNow(id),500); }
+async function saveDocNow(id){ if(!db())return; const d=getDoc(id); if(!d)return; const {error}=await sb.from("documentos").upsert(serDoc(d)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteDocDb(id){ if(!db())return; const {error}=await sb.from("documentos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+
+/* ---------- Storage (bucket "archivos") ---------- */
+async function uploadFile(file){
+  if(!db()){ toast("Iniciá sesión para subir archivos"); return null; }
+  const safe=file.name.replace(/[^\w.\-]+/g,"_");
+  const path=`${UID}/${crypto.randomUUID()}-${safe}`;
+  const {error}=await sb.storage.from("archivos").upload(path,file,{upsert:false});
+  if(error){ toast("Error al subir: "+error.message); return null; }
+  return {name:file.name,path};
+}
+async function openFile(path){
+  if(!db())return;
+  const {data,error}=await sb.storage.from("archivos").createSignedUrl(path,3600);
+  if(error){ toast("No se pudo abrir: "+error.message); return; }
+  window.open(data.signedUrl,"_blank");
+}
+async function removeStorage(path){ if(!db()||!path)return; try{ await sb.storage.from("archivos").remove([path]); }catch(e){} }
 
 async function loadAll(){
   // settings
@@ -134,6 +157,8 @@ async function loadAll(){
   { const {data,error}=await sb.from("vencimientos").select("*").eq("user_id",UID).order("due",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Vencimientos en Supabase."); state.vencimientos=(data||[]).map(deVenc); }
   // reuniones
   { const {data}=await sb.from("reuniones").select("*").eq("user_id",UID).order("fecha",{ascending:false}); state.reuniones=(data||[]).map(deReu); }
+  // documentos
+  { const {data,error}=await sb.from("documentos").select("*").eq("user_id",UID).order("inserted_at",{ascending:false}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración v3 (Repositorio) en Supabase."); state.documentos=(data||[]).map(deDoc); }
   state.seq = state.tasks.reduce((m,t)=>Math.max(m,t.n||0),0)+1;
 }
 
@@ -272,7 +297,7 @@ function rowHTML(t){
   const sp=tot?`<span class="subprog" title="${done} de ${tot} subtareas"><span class="bar"><i style="width:${pct}%"></i></span>${done}/${tot}</span>`:"";
   const rec=t.recur?`<span class="recur-badge" title="Se repite: ${recurLabel(t.recur)}">↻</span>`:"";
   const urlCell=t.url?`<a class="icon-link" href="${esc(t.url)}" target="_blank" title="${esc(t.url)}">🔗</a>`:`<span style="color:var(--tx-faint)">—</span>`;
-  const fileCell=t.file?`<span class="attach-mini" title="${esc(t.file)}">📎 ${esc(t.file)}</span>`:`<span style="color:var(--tx-faint)">—</span>`;
+  const nf=(t.files||[]).length; const fileCell=nf?`<span class="attach-mini" title="${nf} archivo(s)">📎 ${nf}</span>`:`<span style="color:var(--tx-faint)">—</span>`;
   return `<tr><td class="num">${t.n}</td><td class="date">${fmt(t.created)}</td>
     <td><div class="title-wrap"><button class="task-title" data-act="open" data-id="${t.id}">${esc(t.title)}${rec}</button>${sp}</div></td>
     <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select></td>
@@ -330,7 +355,7 @@ function openModal(id){
         <div class="subs" id="mSubs">${t.subs.map((s,i)=>`<div class="sub ${s.d?'done':''}"><input type="checkbox" ${s.d?'checked':''} data-sub="chk" data-i="${i}"><input class="sx" value="${esc(s.t)}" data-sub="txt" data-i="${i}"><button class="del" data-sub="del" data-i="${i}">🗑</button></div>`).join("")}</div>
         <div class="sub-add"><input id="newSub" placeholder="Agregar subtarea y Enter…"></div></div>
       <div><div class="m-block-h"><span>Detalle</span></div><textarea class="m-detail" id="mDetail" placeholder="Notas, contexto, pasos…">${esc(t.detail)}</textarea></div>
-      <div><div class="m-block-h"><span>Adjunto (PDF / foto / Excel)</span></div><div class="attach-row">${t.file?`<span class="file-pill">📎 ${esc(t.file)} <button class="del" id="mFileDel" style="opacity:1">✕</button></span>`:''}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="mFile" style="display:none" accept=".pdf,.xlsx,.xls,image/*"></label></div></div>
+      <div><div class="m-block-h"><span>Adjuntos (PDF / foto / Excel)</span></div><div class="attach-row" style="flex-wrap:wrap">${(t.files||[]).map((f,i)=>`<span class="file-pill">📎 <button class="lnk" data-mfile="open" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-mfile="del" data-i="${i}" style="opacity:1">✕</button></span>`).join("")}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="mFile" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label><span id="mFileBusy" style="font-size:.8em;color:var(--tx-faint);display:none">Subiendo…</span></div></div>
     </div>
     <div class="modal-foot"><button class="link-danger" id="mDelete">Eliminar tarea</button><button class="btn-primary" id="mDone">Listo</button></div>`;
   // binds
@@ -354,8 +379,12 @@ function openModal(id){
     if(kind==="del") el.onclick=()=>{ tk().subs.splice(i,1); scheduleSaveTask(id); openModal(id); };
   });
   $("#newSub").onkeydown=e=>{ if(e.key==='Enter'){ const v=e.target.value.trim(); if(!v)return; tk().subs.push({t:v,d:false}); scheduleSaveTask(id); openModal(id); setTimeout(()=>{const n=$("#newSub"); if(n)n.focus();},10); } };
-  const fd=$("#mFileDel"); if(fd) fd.onclick=()=>{ set("file",null); openModal(id); };
-  $("#mFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; set("file",f.name); openModal(id); };
+  const tk2=()=>state.tasks.find(x=>x.id===id);
+  $("#modal").querySelectorAll("[data-mfile]").forEach(el=>{ const i=+el.dataset.i,kind=el.dataset.mfile;
+    if(kind==="open") el.onclick=()=>{ const f=tk2().files[i]; if(f&&f.path)openFile(f.path); };
+    if(kind==="del") el.onclick=async()=>{ const f=tk2().files[i]; if(f&&f.path)await removeStorage(f.path); tk2().files.splice(i,1); scheduleSaveTask(id); openModal(id); };
+  });
+  $("#mFile").onchange=async e=>{ const f=e.target.files[0]; if(!f)return; const busy=$("#mFileBusy"); if(busy)busy.style.display="inline"; const up=await uploadFile(f); if(busy)busy.style.display="none"; if(up){ const tt=tk2(); tt.files=tt.files||[]; tt.files.push(up); scheduleSaveTask(id); openModal(id); } };
   $("#overlay").classList.add("show");
 }
 function closeModal(){ $("#overlay").classList.remove("show"); modalId=null; if(state.view==='tareas')paintTasks(); else render(); }
@@ -470,10 +499,11 @@ function sectionShortcuts(secId){
 }
 function sectionView(secId){
   const tab=state.secTab;
-  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button></div>`;
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button></div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
+  else if(tab==='repo') body=sectionRepo(secId);
   else body=sectionTasks(secId);
   return `${sectionShortcuts(secId)}<div class="toolbar">${tabs}</div>${body}`;
 }
@@ -594,10 +624,36 @@ function reunionEditor(secId,r){
       <div class="subs">${comps||'<p style="color:var(--tx-faint);font-size:.84em;margin:0">Sin compromisos. Agregá abajo.</p>'}</div>
       <div class="sub-add"><input id="reu_newcomp" placeholder="Agregar compromiso y Enter…" data-act="reuCompAdd" data-ev="keydown"></div>
       <p style="color:var(--tx-faint);font-size:.78em;margin:6px 0 0">“＋ tarea” crea una tarea en Seguimiento, en el área de esta sección.</p></div>
+    <div style="margin-top:14px"><div class="m-block-h"><span>Referencias (links)</span></div>
+      <div class="subs">${(r.urls||[]).map((u,i)=>`<div class="sub"><span style="font-size:.95em">🔗</span><a class="sx" href="${esc(u.url)}" target="_blank" style="color:var(--accent);text-decoration:underline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.label||u.url)}</a><button class="del" data-act="reuUrlDel" data-i="${i}" style="opacity:1">🗑</button></div>`).join("")||'<p style="color:var(--tx-faint);font-size:.84em;margin:0">Sin links. Pegá uno abajo.</p>'}</div>
+      <div class="sub-add"><input id="reu_newurl" placeholder="Pegá una URL y Enter (Drive, Notion, etc.)…" data-act="reuUrlAdd" data-ev="keydown"></div></div>
+    <div style="margin-top:14px"><div class="m-block-h"><span>Adjuntos (acta, minuta, PDF…)</span></div>
+      <div class="attach-row" style="flex-wrap:wrap">${(r.archivos||[]).map((f,i)=>`<span class="file-pill">📎 <button class="lnk" data-act="reuFileOpen" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-act="reuFileDel" data-i="${i}" style="opacity:1">✕</button></span>`).join("")}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="reu_file" data-act="reuFileUp" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label><span id="reu_busy" style="font-size:.8em;color:var(--tx-faint);display:none">Subiendo…</span></div></div>
     <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
     <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="reuBack">Listo</button></div>
   </div>`;
 }
+
+/* ---------- Repositorio ---------- */
+function docRow(d){
+  const files=(d.files||[]).map((f,i)=>`<span class="file-pill" style="margin:1px">📎 <button data-act="docFileOpen" data-id="${d.id}" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-act="docFileDel" data-id="${d.id}" data-i="${i}" style="opacity:1">✕</button></span>`).join("");
+  return `<tr>
+    <td><input class="cell-edit" style="min-width:150px" value="${esc(d.titulo)}" data-act="docF" data-id="${d.id}" data-f="titulo" placeholder="Título"></td>
+    <td><input class="cell-edit" style="min-width:110px" value="${esc(d.categoria)}" data-act="docF" data-id="${d.id}" data-f="categoria" placeholder="Categoría"></td>
+    <td><input type="date" class="cell-edit" value="${esc(d.fecha)}" data-act="docF" data-id="${d.id}" data-f="fecha"></td>
+    <td><div style="display:flex;align-items:center;gap:4px"><input class="cell-edit" style="min-width:130px" value="${esc(d.url)}" data-act="docF" data-id="${d.id}" data-f="url" placeholder="https://…">${d.url?`<a class="icon-link" href="${esc(d.url)}" target="_blank">🔗</a>`:''}</div></td>
+    <td>${files}<label class="btn-ghost" style="cursor:pointer;padding:2px 8px;font-size:.76em">＋<input type="file" data-act="docFileUp" data-id="${d.id}" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label></td>
+    <td><input class="cell-edit" style="min-width:120px" value="${esc(d.nota)}" data-act="docF" data-id="${d.id}" data-f="nota" placeholder="Nota"></td>
+    <td style="text-align:center"><button class="row-del" data-act="docDel" data-id="${d.id}">🗑</button></td></tr>`;
+}
+function sectionRepo(secId){
+  const list=state.documentos.filter(d=>d.area===secId);
+  const rows=list.map(docRow).join("");
+  return `<div style="display:flex;margin-bottom:13px;align-items:center"><span style="font-size:.82em;color:var(--tx-faint)">Procedimientos, manuales, certificados, contratos: link o archivo subido.</span><div style="flex:1"></div><button class="btn-primary" data-act="docAdd" data-id="${secId}">＋ Nuevo documento</button></div>
+  <div class="table-wrap"><table class="tasks" style="min-width:980px"><thead><tr><th>Título</th><th>Categoría</th><th>Fecha</th><th>Link</th><th>Archivos</th><th>Nota</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan="7"><div class="empty">Sin documentos cargados todavía.</div></td></tr>'}</tbody></table></div>`;
+}
+function addDoc(secId){ const d={id:crypto.randomUUID(),area:secId,titulo:"",categoria:"",url:"",files:[],nota:"",fecha:today()}; state.documentos.unshift(d); saveDocNow(d.id); render(); }
 
 /* ============================================================
    CONFIG
@@ -675,6 +731,17 @@ const ACTIONS = {
   reuCompDel:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
   reuCompAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.push({t:v,done:false,taskId:null}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newcomp"); if(n)n.focus();},10); },
   reuCompTask:(el)=>taskFromCompromiso(+el.dataset.i),
+  reuUrlAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.urls=r.urls||[]; r.urls.push({label:v,url:v}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newurl"); if(n)n.focus();},10); },
+  reuUrlDel:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.urls.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
+  reuFileOpen:(el)=>{ const r=getReu(state.reuSel); if(!r)return; const f=r.archivos[+el.dataset.i]; if(f&&f.path)openFile(f.path); },
+  reuFileDel:async(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); const f=r.archivos[+el.dataset.i]; if(f&&f.path)await removeStorage(f.path); r.archivos.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
+  reuFileUp:async(el)=>{ const f=el.files&&el.files[0]; if(!f)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); const busy=$("#reu_busy"); if(busy)busy.style.display="inline"; const up=await uploadFile(f); if(busy)busy.style.display="none"; if(up){ r.archivos=r.archivos||[]; r.archivos.push(up); scheduleSaveReu(r.id); render(); } },
+  docAdd:(el)=>addDoc(el.dataset.id),
+  docF:(el)=>{ const d=getDoc(el.dataset.id); if(!d)return; d[el.dataset.f]=el.value; scheduleSaveDoc(d.id); if(el.type==='date')render(); },
+  docDel:async(el)=>{ const d=getDoc(el.dataset.id); if(d){ for(const f of (d.files||[])) await removeStorage(f.path); } state.documentos=state.documentos.filter(x=>x.id!==el.dataset.id); deleteDocDb(el.dataset.id); render(); },
+  docFileOpen:(el)=>{ const d=getDoc(el.dataset.id); if(!d)return; const f=d.files[+el.dataset.i]; if(f&&f.path)openFile(f.path); },
+  docFileDel:async(el)=>{ const d=getDoc(el.dataset.id); if(!d)return; const f=d.files[+el.dataset.i]; if(f&&f.path)await removeStorage(f.path); d.files.splice(+el.dataset.i,1); scheduleSaveDoc(d.id); render(); },
+  docFileUp:async(el)=>{ const f=el.files&&el.files[0]; if(!f)return; const d=getDoc(el.dataset.id); if(!d)return; const up=await uploadFile(f); if(up){ d.files=d.files||[]; d.files.push(up); scheduleSaveDoc(d.id); render(); } },
   // config
   cfgAdd:(el)=>cfgAdd(el.dataset.kind),
   cfgAddKey:(el,e)=>{ if(e.key==='Enter')cfgAdd(el.dataset.kind); },
