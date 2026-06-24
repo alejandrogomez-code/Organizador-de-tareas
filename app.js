@@ -46,7 +46,8 @@ const SECTION_AREAS = {
   logistica:["Logística","Compras"],
   sistemas:["Sistemas"],
 };
-const OPS_ENABLED = ["admin","calidad"]; // secciones ya construidas
+const OPS_ENABLED = ["admin","calidad","logistica","sistemas"]; // secciones operativas activas
+const REPO_SECTIONS = ["admin","calidad"]; // secciones con pestaña Repositorio
 const VENC_TIPO = ["Impuesto","Contrato","Licencia","Seguro","Certificación","Servicio","Pago","Habilitación","Auditoría","Otro"];
 const PERIODICIDAD = [["unica","Única vez"],["mensual","Mensual"],["bimestral","Bimestral"],["trimestral","Trimestral"],["cuatrimestral","Cuatrimestral"],["semestral","Semestral"],["anual","Anual"]];
 const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
@@ -501,13 +502,14 @@ function sectionShortcuts(secId){
 }
 function sectionView(secId){
   const tab=state.secTab;
+  const repoTab = REPO_SECTIONS.includes(secId) ? `<button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>` : '';
   const sgcTab = secId==='calidad' ? `<button class="${tab==='sgc'?'on':''}" data-act="secTab" data-id="sgc">✦ Sistema de Calidad</button>` : '';
   const cierTab = secId==='admin' ? `<button class="${tab==='cierres'?'on':''}" data-act="secTab" data-id="cierres">$ Cierres contables</button>` : '';
-  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>${sgcTab}${cierTab}</div>`;
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button>${repoTab}${sgcTab}${cierTab}</div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
-  else if(tab==='repo') body=sectionRepo(secId);
+  else if(tab==='repo' && REPO_SECTIONS.includes(secId)) body=sectionRepo(secId);
   else if(tab==='sgc' && secId==='calidad') body=sectionSGC();
   else if(tab==='cierres' && secId==='admin') body=sectionCierres();
   else body=sectionTasks(secId);
