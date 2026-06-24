@@ -25,8 +25,8 @@ const MONTHS = monthRange();
 const monthLabel = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1])+" "+y; };
 const shortM = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1]).slice(0,3)+" '"+y.slice(2); };
 
-const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"}];
-const CARD_STYLE = {objetivos:{bg:"#eef1ff",fg:"#4453c4"},tareas:{bg:"#e8f6ee",fg:"#15803d"},admin:{bg:"#fdf3e2",fg:"#b4760a"},calidad:{bg:"#f3eefe",fg:"#7b4fd0"},logistica:{bg:"#e6f3fb",fg:"#1f7bb6"},sistemas:{bg:"#eef0f3",fg:"#5b6471"}};
+const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
+const CARD_STYLE = {objetivos:{bg:"#eef1ff",fg:"#4453c4"},tareas:{bg:"#e8f6ee",fg:"#15803d"},admin:{bg:"#fdf3e2",fg:"#b4760a"},calidad:{bg:"#f3eefe",fg:"#7b4fd0"},logistica:{bg:"#e6f3fb",fg:"#1f7bb6"},sistemas:{bg:"#eef0f3",fg:"#5b6471"},leex:{bg:"#e9f7f3",fg:"#0f8a6e"}};
 
 /* ---------- Paletas ---------- */
 const PALETTES = {
@@ -45,8 +45,9 @@ const SECTION_AREAS = {
   calidad:["Calidad"],
   logistica:["Logística","Compras"],
   sistemas:["Sistemas"],
+  leex:["LEEX"],
 };
-const OPS_ENABLED = ["admin","calidad","logistica","sistemas"]; // secciones operativas activas
+const OPS_ENABLED = ["admin","calidad","logistica","sistemas","leex"]; // secciones operativas activas
 const REPO_SECTIONS = ["admin","calidad"]; // secciones con pestaña Repositorio
 const VENC_TIPO = ["Impuesto","Contrato","Licencia","Seguro","Certificación","Servicio","Pago","Habilitación","Auditoría","Otro"];
 const PERIODICIDAD = [["unica","Única vez"],["mensual","Mensual"],["bimestral","Bimestral"],["trimestral","Trimestral"],["cuatrimestral","Cuatrimestral"],["semestral","Semestral"],["anual","Anual"]];
@@ -56,7 +57,7 @@ const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
    Estado
    ============================================================ */
 const DEFAULTS = {
-  areas:["Administración","Contabilidad","Finanzas","Marketing","Calidad","Logística","Compras","Sistemas"],
+  areas:["Administración","Contabilidad","Finanzas","Marketing","Calidad","Logística","Compras","Sistemas","LEEX"],
   responsables:["Alejandro","Diego","Leandro","Claudio"],
   shortcuts:[{ic:"📅",label:"Notion Calendar",url:"#",section:"dashboard"},{ic:"✉️",label:"Correo",url:"#",section:"dashboard"},{ic:"🗂️",label:"Notion",url:"#",section:"dashboard"},{ic:"📊",label:"Odoo",url:"#",section:"dashboard"}],
   theme:"grafito",
