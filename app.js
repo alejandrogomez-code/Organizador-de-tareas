@@ -69,6 +69,7 @@ const state = {
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[],
   cal:{}, calLoaded:false, calLoading:false, calError:null,
+  adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
 
 /* ============================================================
@@ -501,12 +502,14 @@ function sectionShortcuts(secId){
 function sectionView(secId){
   const tab=state.secTab;
   const sgcTab = secId==='calidad' ? `<button class="${tab==='sgc'?'on':''}" data-act="secTab" data-id="sgc">✦ Sistema de Calidad</button>` : '';
-  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>${sgcTab}</div>`;
+  const cierTab = secId==='admin' ? `<button class="${tab==='cierres'?'on':''}" data-act="secTab" data-id="cierres">$ Cierres contables</button>` : '';
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button><button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>${sgcTab}${cierTab}</div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
   else if(tab==='repo') body=sectionRepo(secId);
   else if(tab==='sgc' && secId==='calidad') body=sectionSGC();
+  else if(tab==='cierres' && secId==='admin') body=sectionCierres();
   else body=sectionTasks(secId);
   return `${sectionShortcuts(secId)}<div class="toolbar">${tabs}</div>${body}`;
 }
@@ -690,6 +693,56 @@ function sectionSGC(){
     ${block("Procedimientos en revisión",P.length,"<th>Procedimiento</th><th>Área</th><th>Versión</th><th>Estado</th><th>Próx. revisión</th><th>Link</th>",pRows,"Sin procedimientos en revisión.")}`;
 }
 
+/* ---------- Cierres contables (reflejado desde app de Administración) ---------- */
+async function loadAdmin(){
+  state.admLoading=true; state.admError=null; render();
+  try{
+    const c=await sb.from("adm_cierres").select("*"); if(c.error) throw c.error;
+    const t=await sb.from("adm_cierre_tareas").select("*"); if(t.error) throw t.error;
+    state.adm={cierres:c.data||[],tareas:t.data||[]};
+    state.admLoaded=true;
+    if(!state.admCierreSel && state.adm.cierres.length) state.admCierreSel=state.adm.cierres[0].id;
+  }catch(e){ state.admError=(e&&e.message)||String(e); }
+  state.admLoading=false; render();
+}
+function estPill(s){ const t=(s||"").toLowerCase(); const col=/cerr|complet|finaliz|aprob|ok/.test(t)?'st-comp':/proc|curso|revis/.test(t)?'st-proc':/pend|abiert|inici/.test(t)?'st-sin':'st-sin'; return `<span class="status-pill ${col}" style="cursor:default">${esc(s||'—')}</span>`; }
+function cierreLabel(c){ const m=(c.mes>=1&&c.mes<=12)?Cap(MONTHS_ES[c.mes-1]):('Mes '+c.mes); return m+' '+c.anio; }
+function sectionCierres(){
+  if(state.admLoading) return `<div class="table-wrap"><div class="empty">Cargando cierres contables…</div></div>`;
+  if(state.admError){
+    return `<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Conexión con la app de Administración</h3>
+      <p style="font-size:.88em;color:var(--tx-dim);margin:0 0 8px">Todavía no se pueden leer los datos. Es normal si aún no corriste <b>admin-fdw-conexion.sql</b> en Supabase (con tus datos de conexión completados).</p>
+      <p style="font-size:.8em;color:var(--st-urg);margin:0 0 12px">Detalle técnico: ${esc(state.admError)}</p>
+      <button class="btn-ghost" data-act="admReload">Reintentar</button></div>`;
+  }
+  const cierres=(state.adm&&state.adm.cierres)||[]; const tareas=(state.adm&&state.adm.tareas)||[];
+  if(!cierres.length) return `<div style="display:flex;margin-bottom:12px"><div style="flex:1"></div><button class="btn-ghost" data-act="admReload">↻ Actualizar</button></div><div class="table-wrap"><div class="empty">No hay cierres contables cargados en la app de Administración.</div></div>`;
+  const sel=state.admCierreSel || cierres[0].id;
+  const selObj=cierres.find(c=>c.id===sel)||cierres[0];
+  const cRows=cierres.map(c=>{
+    const ts=tareas.filter(t=>t.closing_id===c.id); const done=ts.filter(t=>t.fecha_real_finalizacion).length;
+    const prog=ts.length?Math.round(done/ts.length*100):0;
+    return `<tr class="${c.id===selObj.id?'':''}" style="cursor:pointer;${c.id===selObj.id?'background:var(--accent-soft)':''}" data-act="admPick" data-id="${c.id}">
+      <td><b>${esc(cierreLabel(c))}</b></td>
+      <td>${estPill(c.estado)}</td>
+      <td class="date" style="white-space:nowrap">${c.fecha_estimada_cierre?fmt(c.fecha_estimada_cierre):'—'}</td>
+      <td>${ts.length?`<div class="subprog"><span class="bar"><i style="width:${prog}%"></i></span>${done}/${ts.length}</div>`:'<span style="color:var(--tx-faint)">sin tareas</span>'}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-dim)">${c.observaciones?esc(c.observaciones):''}</td></tr>`;
+  }).join("");
+  const selTasks=tareas.filter(t=>t.closing_id===selObj.id).sort((a,b)=>(a.orden||0)-(b.orden||0));
+  const tRows=selTasks.map(t=>`<tr>
+      <td>${esc(t.nombre||'—')}</td>
+      <td>${estPill(t.estado)}</td>
+      <td class="date" style="white-space:nowrap">${t.fecha_estimada?fmt(t.fecha_estimada):'—'}</td>
+      <td class="date" style="white-space:nowrap">${t.fecha_real_finalizacion?fmt(t.fecha_real_finalizacion):'<span style="color:var(--tx-faint)">pendiente</span>'}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-dim)">${t.observaciones?esc(t.observaciones):''}</td></tr>`).join("");
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde tu app de Administración · solo lectura.</span><div style="flex:1"></div><button class="btn-ghost" data-act="admReload">↻ Actualizar</button></div>
+    <div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Cierres mensuales <span style="color:var(--tx-faint);font-weight:400">· clic en uno para ver sus tareas</span></h3>
+      <div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr><th>Período</th><th>Estado</th><th>Fecha estimada</th><th>Avance</th><th>Observaciones</th></tr></thead><tbody>${cRows}</tbody></table></div></div>
+    <div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Tareas del cierre · ${esc(cierreLabel(selObj))} <span style="color:var(--tx-faint);font-weight:400">· ${selTasks.length}</span></h3>
+      <div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr><th>Tarea</th><th>Estado</th><th>Fecha estimada</th><th>Finalizada</th><th>Observaciones</th></tr></thead><tbody>${tRows||`<tr><td colspan="5"><div class="empty" style="padding:22px">Este cierre no tiene tareas.</div></td></tr>`}</tbody></table></div></div>`;
+}
+
 /* ============================================================
    CONFIG
    ============================================================ */
@@ -746,8 +799,10 @@ const ACTIONS = {
   saveRev:()=>saveReview(),
   taskFromNext:()=>taskFromNextStep(),
   // secciones operativas
-  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.calLoaded && !state.calLoading) loadCalidad(); },
+  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.calLoaded && !state.calLoading) loadCalidad(); if(el.dataset.id==='cierres' && !state.admLoaded && !state.admLoading) loadAdmin(); },
   calReload:()=>loadCalidad(),
+  admReload:()=>loadAdmin(),
+  admPick:(el)=>{ state.admCierreSel=el.dataset.id; render(); },
   secScEdit:()=>{ state.secScEdit=!state.secScEdit; render(); },
   scAddSec:(el)=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#",section:el.dataset.id}); scheduleSaveSettings(); render(); },
   reuView:(el)=>{ state.reuView=el.dataset.id; render(); },
