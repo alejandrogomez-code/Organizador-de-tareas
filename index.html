@@ -126,6 +126,11 @@
   .status-pill::before{ content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
   .st-sin{ color:#5b6471; background:#eef0f3; } .st-urg{ color:#c2353a; background:#fdecec; } .st-proc{ color:#b4760a; background:#fdf3e2; } .st-comp{ color:#15803d; background:#e8f6ee; } .st-desc{ color:#7c8593; background:#f0f1f4; }
   .tag{ display:inline-block; background:#eef1ff; color:#4453c4; border-radius:5px; padding:2px 7px; font-size:.86em; font-weight:600; }
+  .sumcards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .sumcard{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:13px 15px; display:flex; flex-direction:column; gap:6px; border-left:4px solid var(--sc-accent,#cfd4dd); }
+  .sumcard .sc-label{ font-size:.74em; text-transform:uppercase; letter-spacing:.5px; color:var(--tx-dim); font-weight:600; }
+  .sumcard .sc-num{ font-size:1.7em; font-weight:700; line-height:1; color:var(--tx); }
+  .sumcard.sc-sin{ --sc-accent:#8b94a3; } .sumcard.sc-proc{ --sc-accent:#e3a008; } .sumcard.sc-urg{ --sc-accent:#e5484d; } .sumcard.sc-comp{ --sc-accent:#16a34a; }
   .due-over{ color:var(--st-urg)!important; font-weight:600; } .due-soon{ color:#b4760a!important; font-weight:600; }
   .icon-link{ color:var(--tx-faint); text-decoration:none; font-size:1.05em; } .icon-link:hover{ color:var(--accent); }
   .attach-mini{ font-size:.82em; color:var(--tx-dim); display:inline-flex; align-items:center; gap:4px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
