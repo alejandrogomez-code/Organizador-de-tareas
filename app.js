@@ -242,9 +242,21 @@ function optionList(arr,sel,empty){ return `<option value="">${empty}</option>`+
 /* ============================================================
    TAREAS
    ============================================================ */
+function statusCards(list){
+  const c={sin:0,proc:0,urg:0,comp:0};
+  list.forEach(t=>{ if(c[t.status]!==undefined)c[t.status]++; });
+  const card=(cls,label,n)=>`<div class="sumcard ${cls}"><span class="sc-label">${label}</span><span class="sc-num">${n}</span></div>`;
+  return `<div class="sumcards">
+    ${card('sc-sin','Sin iniciar',c.sin)}
+    ${card('sc-proc','En proceso',c.proc)}
+    ${card('sc-urg','Urgentes',c.urg)}
+    ${card('sc-comp','Completado',c.comp)}
+  </div>`;
+}
 function viewTasks(){
   const f=state.filters;
-  return `<div class="toolbar">
+  const cardList=filtered();
+  return `${statusCards(cardList)}<div class="toolbar">
     <div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button></div>
     <div class="filters">
       <select data-act="filter" data-id="estado"><option value="">Todos los estados</option>${STATUSES.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
@@ -520,7 +532,8 @@ function sectionView(secId){
 /* ---------- Tareas del área ---------- */
 function sectionTasks(secId){
   const areas=SECTION_AREAS[secId]||[];
-  let list=state.tasks.filter(t=>areas.includes(t.area));
+  const allInArea=state.tasks.filter(t=>areas.includes(t.area));
+  let list=allInArea;
   if(!state.showDone) list=list.filter(t=>t.status!=='comp'&&t.status!=='desc');
   list=[...list].sort((a,b)=>(a.due||'9999-99-99')<(b.due||'9999-99-99')?-1:1);
   const rows=list.map(t=>{ const st=stMeta(t.status); return `<tr>
@@ -531,7 +544,7 @@ function sectionTasks(secId){
     <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="area">${optionList(state.areas,t.area,"—")}</select></td>
     <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="resp">${optionList(state.responsables,t.resp,"—")}</select></td>
     <td>${t.obj?`<span class="tag">${esc(t.obj)}</span>`:'<span style="color:var(--tx-faint)">—</span>'}</td></tr>`; }).join("");
-  return `<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+  return `${statusCards(allInArea)}<div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
       <span style="font-size:.82em;color:var(--tx-faint)">Áreas incluidas: ${areas.map(esc).join(' · ')}</span>
       <div style="flex:1"></div>
       <button class="btn-ghost ${state.showDone?'on':''}" data-act="toggleDone">${state.showDone?'Ocultar':'Ver'} completadas</button>
