@@ -69,7 +69,8 @@ const state = {
   secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
-  tasks:[], vencimientos:[], reuniones:[], documentos:[],
+  tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
+  blocksDate:null, blockPick:null,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
@@ -105,6 +106,8 @@ function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,fecha:r.fecha|
 function deReu(r){ return {id:r.id,area:r.area||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
 function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titulo||"",categoria:d.categoria||null,url:d.url||null,files:d.files||[],nota:d.nota||null,fecha:d.fecha||null}; }
 function deDoc(r){ return {id:r.id,area:r.area||"",titulo:r.titulo||"",categoria:r.categoria||"",url:r.url||"",files:r.files||[],nota:r.nota||"",fecha:r.fecha||""}; }
+function serBloque(b){ return {id:b.id,user_id:UID,fecha:b.fecha||null,nombre:b.nombre||"",inicio:b.inicio||null,fin:b.fin||null,orden:b.orden||0,tareas:b.tareas||[]}; }
+function deBloque(r){ return {id:r.id,fecha:r.fecha||"",nombre:r.nombre||"",inicio:r.inicio||"",fin:r.fin||"",orden:r.orden||0,tareas:r.tareas||[]}; }
 
 const timers = {};
 function db(){ return sb && UID; }
@@ -128,6 +131,10 @@ function getDoc(id){ return state.documentos.find(d=>d.id===id); }
 function scheduleSaveDoc(id){ if(!db())return; clearTimeout(timers["d"+id]); timers["d"+id]=setTimeout(()=>saveDocNow(id),500); }
 async function saveDocNow(id){ if(!db())return; const d=getDoc(id); if(!d)return; const {error}=await sb.from("documentos").upsert(serDoc(d)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteDocDb(id){ if(!db())return; const {error}=await sb.from("documentos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+function getBloque(id){ return state.bloques.find(b=>b.id===id); }
+function scheduleSaveBloque(id){ if(!db())return; clearTimeout(timers["b"+id]); timers["b"+id]=setTimeout(()=>saveBloqueNow(id),500); }
+async function saveBloqueNow(id){ if(!db())return; const b=getBloque(id); if(!b)return; const {error}=await sb.from("bloques_dia").upsert(serBloque(b)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteBloqueDb(id){ if(!db())return; const {error}=await sb.from("bloques_dia").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 
 /* ---------- Storage (bucket "archivos") ---------- */
 async function uploadFile(file){
@@ -163,6 +170,8 @@ async function loadAll(){
   { const {data}=await sb.from("reuniones").select("*").eq("user_id",UID).order("fecha",{ascending:false}); state.reuniones=(data||[]).map(deReu); }
   // documentos
   { const {data,error}=await sb.from("documentos").select("*").eq("user_id",UID).order("inserted_at",{ascending:false}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración v3 (Repositorio) en Supabase."); state.documentos=(data||[]).map(deDoc); }
+  // bloques del día
+  { const {data,error}=await sb.from("bloques_dia").select("*").eq("user_id",UID).order("orden",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Bloques del día en Supabase."); state.bloques=(data||[]).map(deBloque); }
   state.seq = state.tasks.reduce((m,t)=>Math.max(m,t.n||0),0)+1;
 }
 
@@ -255,9 +264,21 @@ function statusCards(list){
 }
 function viewTasks(){
   const f=state.filters;
+  const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button></div>`;
+  if(state.taskView==='bloques'){
+    if(!state.blocksDate) state.blocksDate=today();
+    return `<div class="toolbar">${seg}
+      <div class="spacer"></div>
+      <button class="btn-ghost" data-act="blkDay" data-id="prev" title="Día anterior">‹</button>
+      <input type="date" class="inp" value="${state.blocksDate}" data-act="blkDate" style="width:auto">
+      <button class="btn-ghost" data-act="blkDay" data-id="next" title="Día siguiente">›</button>
+      <button class="btn-ghost" data-act="blkDay" data-id="today">Hoy</button>
+      <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
+    </div><div id="taskArea"></div>`;
+  }
   const cardList=filtered();
   return `${statusCards(cardList)}<div class="toolbar">
-    <div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button></div>
+    ${seg}
     <div class="filters">
       <select data-act="filter" data-id="estado"><option value="">Todos los estados</option>${STATUSES.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
       <select data-act="filter" data-id="area">${optionList(state.areas,f.area,"Todas las áreas")}</select>
@@ -293,6 +314,7 @@ function sortList(list){
 }
 function paintTasks(){
   const area=$("#taskArea"); if(!area)return;
+  if(state.taskView==='bloques'){ area.innerHTML=bloquesHTML(); bindTaskArea(); wireBloques(); return; }
   const list=filtered();
   if(state.taskView==='kanban'){ if(!list.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas que coincidan con los filtros.</div></div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
   const tl=sortList(visibleTable(list));
@@ -344,7 +366,122 @@ function wireKanban(){
   document.querySelectorAll('.kcard').forEach(c=>{ c.addEventListener('dragstart',e=>{ dragId=c.dataset.id; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); }); c.addEventListener('dragend',()=>{ c.style.opacity=''; }); });
   document.querySelectorAll('.kcol').forEach(col=>{ col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drag-over'); }); col.addEventListener('dragleave',()=>col.classList.remove('drag-over')); col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drag-over'); const t=state.tasks.find(x=>x.id===dragId); if(t){ const prev=t.status; t.status=col.dataset.status; if(t.status==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(t.id); paintTasks(); } }); });
 }
-function nextDue(dateStr,recur){ const d=dateStr?new Date(dateStr+"T00:00"):new Date(); switch(recur){ case 'diaria':d.setDate(d.getDate()+1);break; case 'semanal':d.setDate(d.getDate()+7);break; case 'quincenal':d.setDate(d.getDate()+14);break; case 'mensual':d.setMonth(d.getMonth()+1);break; case 'trimestral':d.setMonth(d.getMonth()+3);break; case 'anual':d.setFullYear(d.getFullYear()+1);break; default:return dateStr||""; } return d.toISOString().slice(0,10); }
+/* ---------- Bloques del día (A timeline + D picker) ---------- */
+const BLK_COLORS = ["#534AB7","#1D9E75","#b4760a","#c2353a","#1f7bb6","#0f8a6e","#888780","#7b4fd0"];
+function blkColor(i){ return BLK_COLORS[i%BLK_COLORS.length]; }
+const longDate = d => d ? new Date(d+"T00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}) : "";
+function minutes(hhmm){ if(!hhmm||!/^\d{1,2}:\d{2}$/.test(hhmm))return null; const[h,m]=hhmm.split(":").map(Number); return h*60+m; }
+function durLabel(ini,fin){ const a=minutes(ini),b=minutes(fin); if(a==null||b==null||b<=a)return ""; const d=b-a,h=Math.floor(d/60),mm=d%60; return (h?h+"h":"")+(mm?(h?" ":"")+mm+"m":(h?"":"0m")); }
+function dayBloques(){ return state.bloques.filter(b=>b.fecha===state.blocksDate).sort((a,b)=>{ const am=minutes(a.inicio),bm=minutes(b.inicio); if(am!=null&&bm!=null&&am!==bm)return am-bm; if(am!=null&&bm==null)return -1; if(am==null&&bm!=null)return 1; return (a.orden||0)-(b.orden||0); }); }
+function taskById(id){ return state.tasks.find(t=>t.id===id); }
+function blocksOverlap(list){
+  const out=new Set();
+  for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+    const a=list[i],b=list[j]; const a1=minutes(a.inicio),a2=minutes(a.fin),b1=minutes(b.inicio),b2=minutes(b.fin);
+    if(a1==null||a2==null||b1==null||b2==null)continue;
+    if(a1<b2&&b1<a2){ out.add(a.id); out.add(b.id); }
+  }
+  return out;
+}
+function bloquesHTML(){
+  const list=dayBloques();
+  const overlap=blocksOverlap(list);
+  let nTasks=0,nUrg=0,planMin=0;
+  list.forEach(b=>{ nTasks+=b.tareas.length; b.tareas.forEach(id=>{ const t=taskById(id); if(t&&t.status==='urg')nUrg++; }); const a=minutes(b.inicio),f=minutes(b.fin); if(a!=null&&f!=null&&f>a)planMin+=f-a; });
+  const planH=Math.floor(planMin/60),planM=planMin%60;
+  const planTxt=planMin?(planH?planH+"h ":"")+(planM?planM+"m":(planH?"":"0m")):"—";
+  const resumen=`<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)">
+    <span style="font-size:1.05em;font-weight:600;text-transform:capitalize">${esc(longDate(state.blocksDate))}</span>
+    <span style="font-size:.86em;color:var(--tx-dim)"><b>${list.length}</b> bloque${list.length===1?'':'s'} · <b>${nTasks}</b> tarea${nTasks===1?'':'s'}${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> urgente${nUrg===1?'':'s'}`:''} · <b>${planTxt}</b> planificado</span>
+    ${list.length?`<button class="btn-ghost" data-act="blkCopyPrev" style="margin-left:auto;font-size:.82em">⎘ Copiar bloques de ayer</button>`:''}
+  </div>`;
+
+  if(!list.length){
+    return `${resumen}<div class="table-wrap"><div class="empty" style="padding:30px 20px">No hay bloques para este día.<br><br><button class="btn-primary" data-act="blkAdd">＋ Crear el primer bloque</button> &nbsp; <button class="btn-ghost" data-act="blkCopyPrev">⎘ Copiar bloques de ayer</button></div></div>`;
+  }
+
+  const blocks=list.map((b,i)=>{
+    const col=blkColor(i);
+    const over=overlap.has(b.id);
+    const dur=durLabel(b.inicio,b.fin);
+    const rows=b.tareas.map(id=>{
+      const t=taskById(id);
+      if(!t) return `<div class="blk-task" style="opacity:.6"><span style="flex:1;font-size:.86em;color:var(--tx-faint)">Tarea eliminada</span><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${id}" style="opacity:1">🗑</button></div>`;
+      const st=stMeta(t.status);
+      return `<div class="blk-task"><button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left">${esc(t.title)}</button>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim);margin-right:2px">${esc(t.area)}</span>`:''}<select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${t.id}" title="Quitar del bloque" style="opacity:1">✕</button></div>`;
+    }).join("");
+    return `<div class="blk-card" style="border-left-color:${col}">
+      <div class="blk-head">
+        <input class="blk-name" value="${esc(b.nombre)}" placeholder="Nombre del bloque" data-act="blkF" data-id="${b.id}" data-f="nombre" data-input>
+        <span class="blk-time">
+          <input type="time" value="${esc(b.inicio)}" data-act="blkF" data-id="${b.id}" data-f="inicio" title="Inicio"> – <input type="time" value="${esc(b.fin)}" data-act="blkF" data-id="${b.id}" data-f="fin" title="Fin">
+          ${dur?`<span class="blk-dur">${dur}</span>`:''}
+          ${over?`<span class="blk-warn" title="Se superpone con otro bloque">⚠ se pisa</span>`:''}
+        </span>
+        <button class="del" data-act="blkDel" data-id="${b.id}" title="Eliminar bloque" style="opacity:1">🗑</button>
+      </div>
+      <div class="blk-tasks">${rows||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div>
+      <button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea desde el seguimiento</button>
+    </div>`;
+  }).join("");
+
+  return `${resumen}<div class="blk-timeline">${blocks}</div>${state.blockPick?pickPanelHTML():''}`;
+}
+function pickPanelHTML(){
+  const b=getBloque(state.blockPick); if(!b)return"";
+  const q=(state._blkQ||"").toLowerCase();
+  const inBlock=new Set(b.tareas);
+  let list=state.tasks.filter(t=>!inBlock.has(t.id)&&t.status!=='comp'&&t.status!=='desc');
+  if(q) list=list.filter(t=>t.title.toLowerCase().includes(q)||(t.area||"").toLowerCase().includes(q));
+  list=list.slice(0,40);
+  const rows=list.map(t=>{ const st=stMeta(t.status); return `<div class="pick-row" data-act="blkPickAdd" data-b="${b.id}" data-t="${t.id}"><span style="flex:1">${esc(t.title)}</span>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}<span class="status-pill ${st.cls}" style="cursor:pointer">${st.label}</span></div>`; }).join("");
+  return `<div class="overlay show" id="blkOverlay"><div class="modal" id="blkModal" style="max-width:560px">
+    <div class="modal-head"><span class="m-title" style="flex:1;font-size:1.12em;font-weight:600">Agregar tarea a “${esc(b.nombre||'bloque')}”</span><button class="modal-close" data-act="blkPickCancel">✕</button></div>
+    <div style="padding:16px 18px">
+      <input type="search" id="blkPickSearch" placeholder="Buscar tarea del seguimiento…" value="${esc(state._blkQ||'')}" data-act="blkPickSearch" data-input class="inp" style="width:100%;margin:0 0 12px">
+      <div class="pick-list">${rows||'<div class="empty" style="padding:18px">No hay tareas que coincidan. Las completadas y descartadas no se muestran.</div>'}</div>
+      <p style="font-size:.78em;color:var(--tx-faint);margin:12px 0 0">El estado de cada tarea se maneja desde el seguimiento — acá solo la sumás al bloque.</p>
+    </div>
+  </div></div>`;
+}
+function wireBloques(){
+  let dragTask=null;
+  document.querySelectorAll('.blk-task').forEach(c=>{
+    const sel=c.querySelector('[data-act="open"]'); if(!sel)return;
+    c.setAttribute('draggable','true');
+    c.addEventListener('dragstart',e=>{ dragTask=sel.dataset.id; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
+    c.addEventListener('dragend',()=>{ c.style.opacity=''; });
+  });
+  const cards=[...document.querySelectorAll('.blk-card')]; const list=dayBloques();
+  cards.forEach((card,idx)=>{
+    card.addEventListener('dragover',e=>{ e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave',()=>card.classList.remove('drag-over'));
+    card.addEventListener('drop',e=>{ e.preventDefault(); card.classList.remove('drag-over');
+      if(!dragTask)return; const target=list[idx]; if(!target||target.tareas.includes(dragTask)){ dragTask=null; return; }
+      state.bloques.forEach(b=>{ if(b.fecha===state.blocksDate){ const k=b.tareas.indexOf(dragTask); if(k>=0){ b.tareas.splice(k,1); scheduleSaveBloque(b.id); } } });
+      target.tareas.push(dragTask); scheduleSaveBloque(target.id); dragTask=null; paintTasks();
+    });
+  });
+  const ov=$("#blkOverlay"); if(ov) ov.onclick=e=>{ if(e.target.id==='blkOverlay'){ state.blockPick=null; state._blkQ=""; paintTasks(); } };
+  const s=$("#blkPickSearch"); if(s){ s.focus(); s.setSelectionRange(s.value.length,s.value.length); }
+}
+function addBloque(){
+  if(!state.blocksDate) state.blocksDate=today();
+  const maxOrden=state.bloques.filter(b=>b.fecha===state.blocksDate).reduce((m,b)=>Math.max(m,b.orden||0),0);
+  const b={id:crypto.randomUUID(),fecha:state.blocksDate,nombre:"Nuevo bloque",inicio:"",fin:"",orden:maxOrden+1,tareas:[]};
+  state.bloques.push(b); saveBloqueNow(b.id); paintTasks();
+}
+function copyPrevBloques(){
+  if(!state.blocksDate) state.blocksDate=today();
+  if(state.bloques.some(b=>b.fecha===state.blocksDate)){ if(!confirm("Este día ya tiene bloques. ¿Agregar igualmente los del día anterior?"))return; }
+  const prev=new Date(state.blocksDate+"T00:00"); prev.setDate(prev.getDate()-1); const pd=prev.toISOString().slice(0,10);
+  const src=state.bloques.filter(b=>b.fecha===pd);
+  if(!src.length){ toast("El día anterior no tiene bloques para copiar."); return; }
+  src.forEach(b=>{ const nb={id:crypto.randomUUID(),fecha:state.blocksDate,nombre:b.nombre,inicio:b.inicio,fin:b.fin,orden:b.orden,tareas:[...b.tareas]}; state.bloques.push(nb); saveBloqueNow(nb.id); });
+  toast(`Se copiaron ${src.length} bloque${src.length===1?'':'s'} de ayer.`); paintTasks();
+}
+
+
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
 function refreshTasks(){ if(state.view==='tareas') paintTasks(); else render(); }
 function setField(id,field,val){ const t=state.tasks.find(x=>x.id===id); if(!t)return; const prev=t[field]; t[field]=val; if(field==='status'&&val==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(id); refreshTasks(); }
@@ -857,6 +994,18 @@ const ACTIONS = {
   scAdd:()=>{ state.shortcuts.push({ic:"🔗",label:"Nuevo acceso",url:"#",section:"dashboard"}); scheduleSaveSettings(); render(); },
   scDel:(el)=>{ state.shortcuts.splice(+el.dataset.i,1); scheduleSaveSettings(); render(); },
   theme:(el)=>{ applyTheme(el.dataset.k); scheduleSaveSettings(); render(); },
+  // bloques del día
+  blkAdd:()=>addBloque(),
+  blkDate:(el)=>{ state.blocksDate=el.value||today(); state.blockPick=null; paintTasks(); },
+  blkDay:(el)=>{ if(!state.blocksDate)state.blocksDate=today(); if(el.dataset.id==='today'){ state.blocksDate=today(); } else { const d=new Date(state.blocksDate+"T00:00"); d.setDate(d.getDate()+(el.dataset.id==='next'?1:-1)); state.blocksDate=d.toISOString().slice(0,10); } state.blockPick=null; render(); },
+  blkF:(el)=>{ const b=getBloque(el.dataset.id); if(!b)return; b[el.dataset.f]=el.value; scheduleSaveBloque(b.id); if(el.type==='time')paintTasks(); },
+  blkDel:(el)=>{ const id=el.dataset.id; const b=getBloque(id); if(b&&(b.tareas.length||b.nombre&&b.nombre!=='Nuevo bloque')){ if(!confirm("¿Eliminar este bloque? Las tareas no se borran, solo salen del bloque."))return; } state.bloques=state.bloques.filter(x=>x.id!==id); deleteBloqueDb(id); if(state.blockPick===id)state.blockPick=null; paintTasks(); },
+  blkCopyPrev:()=>copyPrevBloques(),
+  blkPick:(el)=>{ state.blockPick=el.dataset.id; state._blkQ=""; paintTasks(); },
+  blkPickCancel:()=>{ state.blockPick=null; state._blkQ=""; paintTasks(); },
+  blkPickSearch:(el)=>{ state._blkQ=el.value; paintTasks(); },
+  blkPickAdd:(el)=>{ const b=getBloque(el.dataset.b); if(!b)return; if(!b.tareas.includes(el.dataset.t))b.tareas.push(el.dataset.t); scheduleSaveBloque(b.id); state._blkQ=""; paintTasks(); },
+  blkTaskDel:(el)=>{ const b=getBloque(el.dataset.b); if(!b)return; b.tareas=b.tareas.filter(x=>x!==el.dataset.t); scheduleSaveBloque(b.id); paintTasks(); },
 };
 /* fix: objF for name should not re-render (perdería foco). Re-render solo para selects. */
 ACTIONS.objF=(el)=>{ const o=getObjById(state.objSel); o[el.dataset.f]=el.value; scheduleSaveObj(o.id); if(el.tagName==="SELECT")render(); };
