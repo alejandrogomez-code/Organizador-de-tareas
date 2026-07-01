@@ -70,7 +70,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
-  blocksDate:null, blockPick:null,
+  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
@@ -118,7 +118,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(error)toast("No se pudo guardar config: "+error.message); }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -158,7 +158,7 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"grafito"; }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"grafito"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -242,7 +242,7 @@ function viewDashboard(){
   }).join("");
   return `<div class="dash-top">
     <div class="widget">${meetingWidget}</div>
-    <div class="widget"><h3>Accesos directos</h3><div class="shortcuts">${sc}</div></div>
+    <div class="widget"><h3>Accesos directos</h3><div class="shortcuts">${sc}</div><button class="btn-ghost" data-act="revSemanal" style="margin-top:12px;width:100%">✓ Revisión semanal</button></div>
   </div><div class="section-h">Secciones</div><div class="cards">${cards}</div>`;
 }
 function viewPlaceholder(sec){ return `<div class="placeholder"><div class="pico">${sec?sec.ic:'•'}</div><h2>${esc(sec?sec.label:'')}</h2><p>Esta sección todavía no tiene contenido. La armamos cuando definamos qué necesitás acá.</p></div>`; }
@@ -267,12 +267,15 @@ function viewTasks(){
   const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button></div>`;
   if(state.taskView==='bloques'){
     if(!state.blocksDate) state.blocksDate=today();
+    const vseg=`<div class="seg vseg" title="Vista de los bloques">${[["agenda","▭","Agenda"],["compacta","≡","Compacta"],["timeline","⌇","Línea horaria"]].map(v=>`<button class="${state.blkView===v[0]?'on':''}" data-act="blkView" data-id="${v[0]}" title="${v[2]}">${v[1]}</button>`).join("")}</div>`;
     return `<div class="toolbar">${seg}
+      ${vseg}
       <div class="spacer"></div>
       <button class="btn-ghost" data-act="blkDay" data-id="prev" title="Día anterior">‹</button>
       <input type="date" class="inp" value="${state.blocksDate}" data-act="blkDate" style="width:auto">
       <button class="btn-ghost" data-act="blkDay" data-id="next" title="Día siguiente">›</button>
       <button class="btn-ghost" data-act="blkDay" data-id="today">Hoy</button>
+      <button class="btn-ghost" data-act="blkClose" title="Repasar el día y pasar lo pendiente al día siguiente">✓ Cierre del día</button>
       <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
     </div><div id="taskArea"></div>`;
   }
@@ -383,6 +386,81 @@ function blocksOverlap(list){
   }
   return out;
 }
+function blkTaskRow(b,id){
+  const t=taskById(id);
+  if(!t) return `<div class="blk-task" style="opacity:.6"><span style="flex:1;font-size:.86em;color:var(--tx-faint)">Tarea eliminada</span><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${id}" style="opacity:1">🗑</button></div>`;
+  const st=stMeta(t.status);
+  return `<div class="blk-task"><button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left">${esc(t.title)}</button>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim);margin-right:2px">${esc(t.area)}</span>`:''}<select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${t.id}" title="Quitar del bloque" style="opacity:1">✕</button></div>`;
+}
+function blkHeadHTML(b,over){
+  const dur=durLabel(b.inicio,b.fin);
+  return `<div class="blk-head">
+    <input class="blk-name" value="${esc(b.nombre)}" placeholder="Nombre del bloque" data-act="blkF" data-id="${b.id}" data-f="nombre" data-input>
+    <span class="blk-time">
+      <input type="time" value="${esc(b.inicio)}" data-act="blkF" data-id="${b.id}" data-f="inicio" title="Inicio"> – <input type="time" value="${esc(b.fin)}" data-act="blkF" data-id="${b.id}" data-f="fin" title="Fin">
+      ${dur?`<span class="blk-dur">${dur}</span>`:''}
+      ${over?`<span class="blk-warn" title="Se superpone con otro bloque">⚠ se pisa</span>`:''}
+    </span>
+    <button class="del" data-act="blkDel" data-id="${b.id}" title="Eliminar bloque" style="opacity:1">🗑</button>
+  </div>`;
+}
+function blkAgenda(list,overlap){
+  return `<div class="blk-timeline">${list.map((b,i)=>{
+    const rows=b.tareas.map(id=>blkTaskRow(b,id)).join("");
+    return `<div class="blk-card" style="border-left-color:${blkColor(i)}">
+      ${blkHeadHTML(b,overlap.has(b.id))}
+      <div class="blk-tasks">${rows||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div>
+      <button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea desde el seguimiento</button>
+    </div>`;
+  }).join("")}</div>`;
+}
+function blkCompacta(list,overlap){
+  return `<div class="blk-compact">${list.map((b,i)=>{
+    const open=state.blkOpen===b.id;
+    const dur=durLabel(b.inicio,b.fin);
+    const nUrg=b.tareas.filter(id=>{ const t=taskById(id); return t&&t.status==='urg'; }).length;
+    const rangeTxt=(b.inicio||b.fin)?`${b.inicio||'—'}–${b.fin||'—'}`:'sin horario';
+    const badge=nUrg?`<span class="blk-warn" style="font-size:.82em">${nUrg} urg</span>`:`<span style="font-size:.82em;color:var(--tx-faint)">${b.tareas.length} tarea${b.tareas.length===1?'':'s'}</span>`;
+    const body=open?`<div class="blk-comp-body">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}<button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button></div>`:'';
+    return `<div class="blk-comp-item" style="border-left-color:${blkColor(i)}">
+      <div class="blk-comp-head" data-act="blkToggle" data-id="${b.id}">
+        <span class="chev">${open?'▾':'▸'}</span>
+        <span style="flex:1;font-weight:600;font-size:.92em">${esc(b.nombre||'Bloque')}</span>
+        <span style="font-size:.82em;color:var(--tx-dim)">${rangeTxt}</span>
+        ${dur?`<span class="blk-dur" style="font-size:.82em">${dur}</span>`:''}
+        ${overlap.has(b.id)?`<span class="blk-warn" style="font-size:.82em" title="Se pisa con otro">⚠</span>`:''}
+        ${badge}
+      </div>
+      ${body}
+    </div>`;
+  }).join("")}</div>`;
+}
+function blkTimeline(list,overlap){
+  const withTime=list.filter(b=>minutes(b.inicio)!=null&&minutes(b.fin)!=null&&minutes(b.fin)>minutes(b.inicio));
+  const noTime=list.filter(b=>!(minutes(b.inicio)!=null&&minutes(b.fin)!=null&&minutes(b.fin)>minutes(b.inicio)));
+  let startH=8,endH=18;
+  if(withTime.length){ const mins=withTime.map(b=>minutes(b.inicio)), maxs=withTime.map(b=>minutes(b.fin));
+    startH=Math.min(startH,Math.floor(Math.min(...mins)/60)); endH=Math.max(endH,Math.ceil(Math.max(...maxs)/60)); }
+  const total=(endH-startH)*60; const PXH=54; const H=(endH-startH)*PXH;
+  const hourLines=[]; for(let h=startH;h<=endH;h++){ const top=((h-startH)*60/total)*H; hourLines.push(`<div class="tl-hour" style="top:${top}px"><span>${String(h).padStart(2,'0')}:00</span></div>`); }
+  // "ahora"
+  let nowLine="";
+  if(state.blocksDate===today()){ const n=new Date(); const nm=n.getHours()*60+n.getMinutes(); if(nm>=startH*60&&nm<=endH*60){ const top=((nm-startH*60)/total)*H; nowLine=`<div class="tl-now" style="top:${top}px"><span>ahora</span></div>`; } }
+  const bars=withTime.map((b,i)=>{
+    const idx=list.indexOf(b); const col=blkColor(idx);
+    const a=minutes(b.inicio),f=minutes(b.fin);
+    const top=((a-startH*60)/total)*H, hgt=Math.max(22,((f-a)/total)*H);
+    const dur=durLabel(b.inicio,b.fin);
+    return `<div class="tl-bar" style="top:${top}px;height:${hgt}px;border-left-color:${col};background:${col}14" data-act="blkToggle" data-id="${b.id}" title="${esc(b.nombre)} · ${b.inicio}–${b.fin}">
+      <span class="tl-name">${esc(b.nombre||'Bloque')}</span>
+      <span class="tl-meta">${b.inicio}–${b.fin}${dur?' · '+dur:''}${b.tareas.length?' · '+b.tareas.length+' tarea'+(b.tareas.length===1?'':'s'):''}${overlap.has(b.id)?' ⚠':''}</span>
+    </div>`;
+  }).join("");
+  const graph=`<div class="tl-wrap"><div class="tl-grid" style="height:${H}px">${hourLines.join("")}${nowLine}<div class="tl-track">${bars}</div></div></div>`;
+  const noTimeHTML=noTime.length?`<div class="tl-notime"><div style="font-size:.78em;color:var(--tx-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Sin horario asignado</div>${blkAgenda(noTime,overlap)}</div>`:"";
+  const detail=state.blkOpen?(()=>{ const b=getBloque(state.blkOpen); if(!b||b.fecha!==state.blocksDate)return""; return `<div class="tl-detail">${blkHeadHTML(b,overlap.has(b.id))}<div class="blk-tasks">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div><button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button></div>`; })():`<div class="tl-hint">Tocá un bloque para ver y editar sus tareas.</div>`;
+  return `<div class="tl-layout"><div>${graph}${noTimeHTML}</div><div>${detail}</div></div>`;
+}
 function bloquesHTML(){
   const list=dayBloques();
   const overlap=blocksOverlap(list);
@@ -390,9 +468,10 @@ function bloquesHTML(){
   list.forEach(b=>{ nTasks+=b.tareas.length; b.tareas.forEach(id=>{ const t=taskById(id); if(t&&t.status==='urg')nUrg++; }); const a=minutes(b.inicio),f=minutes(b.fin); if(a!=null&&f!=null&&f>a)planMin+=f-a; });
   const planH=Math.floor(planMin/60),planM=planMin%60;
   const planTxt=planMin?(planH?planH+"h ":"")+(planM?planM+"m":(planH?"":"0m")):"—";
+  const overload=planMin>360;
   const resumen=`<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)">
     <span style="font-size:1.05em;font-weight:600;text-transform:capitalize">${esc(longDate(state.blocksDate))}</span>
-    <span style="font-size:.86em;color:var(--tx-dim)"><b>${list.length}</b> bloque${list.length===1?'':'s'} · <b>${nTasks}</b> tarea${nTasks===1?'':'s'}${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> urgente${nUrg===1?'':'s'}`:''} · <b>${planTxt}</b> planificado</span>
+    <span style="font-size:.86em;color:var(--tx-dim)"><b>${list.length}</b> bloque${list.length===1?'':'s'} · <b>${nTasks}</b> tarea${nTasks===1?'':'s'}${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> urgente${nUrg===1?'':'s'}`:''} · <b${overload?' style="color:var(--st-proc)"':''}>${planTxt}</b> planificado${overload?' <span title="Más de 6h de foco planificadas — cuidá no sobrecargar el día">⚠</span>':''}</span>
     ${list.length?`<button class="btn-ghost" data-act="blkCopyPrev" style="margin-left:auto;font-size:.82em">⎘ Copiar bloques de ayer</button>`:''}
   </div>`;
 
@@ -400,32 +479,12 @@ function bloquesHTML(){
     return `${resumen}<div class="table-wrap"><div class="empty" style="padding:30px 20px">No hay bloques para este día.<br><br><button class="btn-primary" data-act="blkAdd">＋ Crear el primer bloque</button> &nbsp; <button class="btn-ghost" data-act="blkCopyPrev">⎘ Copiar bloques de ayer</button></div></div>`;
   }
 
-  const blocks=list.map((b,i)=>{
-    const col=blkColor(i);
-    const over=overlap.has(b.id);
-    const dur=durLabel(b.inicio,b.fin);
-    const rows=b.tareas.map(id=>{
-      const t=taskById(id);
-      if(!t) return `<div class="blk-task" style="opacity:.6"><span style="flex:1;font-size:.86em;color:var(--tx-faint)">Tarea eliminada</span><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${id}" style="opacity:1">🗑</button></div>`;
-      const st=stMeta(t.status);
-      return `<div class="blk-task"><button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left">${esc(t.title)}</button>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim);margin-right:2px">${esc(t.area)}</span>`:''}<select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${t.id}" title="Quitar del bloque" style="opacity:1">✕</button></div>`;
-    }).join("");
-    return `<div class="blk-card" style="border-left-color:${col}">
-      <div class="blk-head">
-        <input class="blk-name" value="${esc(b.nombre)}" placeholder="Nombre del bloque" data-act="blkF" data-id="${b.id}" data-f="nombre" data-input>
-        <span class="blk-time">
-          <input type="time" value="${esc(b.inicio)}" data-act="blkF" data-id="${b.id}" data-f="inicio" title="Inicio"> – <input type="time" value="${esc(b.fin)}" data-act="blkF" data-id="${b.id}" data-f="fin" title="Fin">
-          ${dur?`<span class="blk-dur">${dur}</span>`:''}
-          ${over?`<span class="blk-warn" title="Se superpone con otro bloque">⚠ se pisa</span>`:''}
-        </span>
-        <button class="del" data-act="blkDel" data-id="${b.id}" title="Eliminar bloque" style="opacity:1">🗑</button>
-      </div>
-      <div class="blk-tasks">${rows||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div>
-      <button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea desde el seguimiento</button>
-    </div>`;
-  }).join("");
+  let body;
+  if(state.blkView==='compacta') body=blkCompacta(list,overlap);
+  else if(state.blkView==='timeline') body=blkTimeline(list,overlap);
+  else body=blkAgenda(list,overlap);
 
-  return `${resumen}<div class="blk-timeline">${blocks}</div>${state.blockPick?pickPanelHTML():''}`;
+  return `${resumen}${body}${state.blockPick?pickPanelHTML():''}`;
 }
 function pickPanelHTML(){
   const b=getBloque(state.blockPick); if(!b)return"";
@@ -479,6 +538,102 @@ function copyPrevBloques(){
   if(!src.length){ toast("El día anterior no tiene bloques para copiar."); return; }
   src.forEach(b=>{ const nb={id:crypto.randomUUID(),fecha:state.blocksDate,nombre:b.nombre,inicio:b.inicio,fin:b.fin,orden:b.orden,tareas:[...b.tareas]}; state.bloques.push(nb); saveBloqueNow(nb.id); });
   toast(`Se copiaron ${src.length} bloque${src.length===1?'':'s'} de ayer.`); paintTasks();
+}
+
+/* ---------- Modal genérico (reutiliza #overlay/#modal) ---------- */
+function openHtmlModal(html){
+  $("#modal").innerHTML=html;
+  $("#modal").querySelectorAll("[data-act]").forEach(el=>{
+    const h=ACTIONS[el.dataset.act]; if(!h)return;
+    const ev=el.dataset.ev||(el.tagName==="SELECT"||el.tagName==="INPUT"||el.tagName==="TEXTAREA"?"change":"click");
+    el["on"+ev]=e=>h(el,e);
+    if(el.dataset.input!==undefined) el.oninput=e=>h(el,e);
+  });
+  $("#overlay").classList.add("show");
+}
+
+/* ---------- Cierre del día ---------- */
+function nextDay(dstr){ const d=new Date(dstr+"T00:00"); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+function openCierreDia(){
+  const list=dayBloques();
+  const items=[]; // {block, task}
+  list.forEach(b=>b.tareas.forEach(id=>{ const t=taskById(id); if(t&&t.status!=='comp'&&t.status!=='desc')items.push({b,t}); }));
+  const nd=nextDay(state.blocksDate);
+  const done=list.reduce((n,b)=>n+b.tareas.filter(id=>{ const t=taskById(id); return t&&t.status==='comp'; }).length,0);
+  const totalTasks=list.reduce((n,b)=>n+b.tareas.length,0);
+  const body = !items.length
+    ? `<div class="empty" style="padding:24px">${totalTasks?'¡Bien! No quedaron tareas pendientes en los bloques de hoy.':'Los bloques de hoy no tienen tareas.'}</div>`
+    : `<p style="font-size:.88em;color:var(--tx-dim);margin:0 0 12px">Estas tareas quedaron sin completar. Podés pasarlas a los bloques equivalentes de mañana (${esc(fmt(nd))}). Se crea el bloque en el día siguiente si no existe; las tareas conservan su estado.</p>
+       <div class="cierre-list">${items.map(({b,t})=>{ const st=stMeta(t.status); return `<div class="cierre-row"><span style="flex:1">${esc(t.title)}</span><span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(b.nombre||'bloque')}</span><span class="status-pill ${st.cls}">${st.label}</span></div>`; }).join("")}</div>`;
+  openHtmlModal(`<div class="modal-head" style="border-bottom:1px solid var(--line);padding:16px 18px;display:flex;align-items:center;gap:12px">
+      <span class="m-title" style="flex:1;font-size:1.12em;font-weight:600">Cierre del día · <span style="text-transform:capitalize">${esc(longDate(state.blocksDate))}</span></span>
+      <button class="modal-close" data-act="cierreClose">✕</button>
+    </div>
+    <div style="padding:16px 18px">
+      <div style="display:flex;gap:16px;margin-bottom:14px;font-size:.86em;color:var(--tx-dim)"><span><b>${done}</b>/${totalTasks} completadas</span><span><b style="color:var(--st-proc)">${items.length}</b> pendiente${items.length===1?'':'s'}</span></div>
+      ${body}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+        <button class="btn-ghost" data-act="cierreClose">Cerrar</button>
+        ${items.length?`<button class="btn-primary" data-act="cierreMove">→ Pasar ${items.length} tarea${items.length===1?'':'s'} a mañana</button>`:''}
+      </div>
+    </div>`);
+}
+function cierreMoverPendientes(){
+  const list=dayBloques(); const nd=nextDay(state.blocksDate);
+  let moved=0;
+  list.forEach(b=>{
+    const pend=b.tareas.filter(id=>{ const t=taskById(id); return t&&t.status!=='comp'&&t.status!=='desc'; });
+    if(!pend.length)return;
+    let target=state.bloques.find(x=>x.fecha===nd&&x.nombre===b.nombre);
+    if(!target){ const maxOrden=state.bloques.filter(x=>x.fecha===nd).reduce((m,x)=>Math.max(m,x.orden||0),0); target={id:crypto.randomUUID(),fecha:nd,nombre:b.nombre,inicio:b.inicio,fin:b.fin,orden:maxOrden+1,tareas:[]}; state.bloques.push(target); }
+    pend.forEach(id=>{ if(!target.tareas.includes(id)){ target.tareas.push(id); moved++; } });
+    // se van del bloque de hoy (la tarea sigue viva en el seguimiento)
+    b.tareas=b.tareas.filter(id=>!pend.includes(id));
+    saveBloqueNow(target.id); saveBloqueNow(b.id);
+  });
+  closeModal();
+  toast(moved?`Se pasaron ${moved} tarea${moved===1?'':'s'} a ${fmt(nd)}.`:"No había pendientes para pasar.");
+}
+
+/* ---------- Revisión semanal guiada (GTD) ---------- */
+function openRevisionSemanal(){
+  const t0=today();
+  const weekEnd=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+  const old=new Date(Date.now()-14*864e5).toISOString().slice(0,10);
+  // datos que conectan secciones ya existentes (sin crear datos nuevos)
+  const cur=t0.slice(0,7);
+  const objSinRev=state.objetivos.filter(o=>!(o.reviews||[]).some(r=>r.month===cur));
+  const tareasViejas=state.tasks.filter(t=>t.status!=='comp'&&t.status!=='desc'&&t.created&&t.created<old);
+  const urgentes=state.tasks.filter(t=>t.status==='urg');
+  const vencProx=state.vencimientos.filter(v=>v.status!=='ok'&&v.due&&v.due>=t0&&v.due<=weekEnd);
+  const vencidas=state.vencimientos.filter(v=>v.status!=='ok'&&v.due&&v.due<t0);
+  const sinBloque=(()=>{ // tareas urgentes/proc de hoy no asignadas a ningún bloque de hoy
+    const hoy=state.bloques.filter(b=>b.fecha===t0); const asignadas=new Set(); hoy.forEach(b=>b.tareas.forEach(id=>asignadas.add(id)));
+    return state.tasks.filter(t=>(t.status==='urg'||t.status==='proc')&&!asignadas.has(t.id));
+  })();
+  const check=(icon,titulo,n,detalle,ok)=>`<div class="rev-item ${ok?'ok':''}">
+      <span class="rev-ic">${ok?'✓':icon}</span>
+      <div style="flex:1"><div style="font-weight:600;font-size:.94em">${titulo}</div><div style="font-size:.82em;color:var(--tx-dim)">${detalle}</div></div>
+      <span class="rev-n ${ok?'':'warn'}">${n}</span>
+    </div>`;
+  const html=`<div class="modal-head" style="border-bottom:1px solid var(--line);padding:16px 18px;display:flex;align-items:center;gap:12px">
+      <span class="m-title" style="flex:1;font-size:1.12em;font-weight:600">Revisión semanal</span>
+      <button class="modal-close" data-act="cierreClose">✕</button>
+    </div>
+    <div style="padding:16px 18px">
+      <p style="font-size:.85em;color:var(--tx-dim);margin:0 0 14px">Un repaso rápido para arrancar la semana con todo bajo control. No se crea nada nuevo: son señales de las secciones que ya usás.</p>
+      <div class="rev-list">
+        ${check('◎','Objetivos al día',objSinRev.length,objSinRev.length?`${objSinRev.length} objetivo${objSinRev.length===1?'':'s'} sin revisión este mes`:'Todos tienen revisión del mes',objSinRev.length===0)}
+        ${check('☑','Tareas viejas sin tocar',tareasViejas.length,tareasViejas.length?`${tareasViejas.length} tarea${tareasViejas.length===1?'':'s'} creada${tareasViejas.length===1?'':'s'} hace +2 semanas y sin cerrar`:'Nada estancado',tareasViejas.length===0)}
+        ${check('◆','Urgentes abiertas',urgentes.length,urgentes.length?`${urgentes.length} marcada${urgentes.length===1?'':'s'} como urgente`:'Sin urgentes pendientes',urgentes.length===0)}
+        ${check('⚠','Vencimientos próximos',vencProx.length+vencidas.length,vencidas.length?`${vencidas.length} vencida${vencidas.length===1?'':'s'}${vencProx.length?` · ${vencProx.length} esta semana`:''}`:(vencProx.length?`${vencProx.length} esta semana`:'Nada a la vista'),vencProx.length+vencidas.length===0)}
+        ${check('🗓','Foco de hoy sin planificar',sinBloque.length,sinBloque.length?`${sinBloque.length} tarea${sinBloque.length===1?'':'s'} urgente/en proceso fuera de los bloques de hoy`:'Lo importante está en bloques',sinBloque.length===0)}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+        <button class="btn-primary" data-act="cierreClose">Listo</button>
+      </div>
+    </div>`;
+  openHtmlModal(html);
 }
 
 
@@ -996,6 +1151,12 @@ const ACTIONS = {
   theme:(el)=>{ applyTheme(el.dataset.k); scheduleSaveSettings(); render(); },
   // bloques del día
   blkAdd:()=>addBloque(),
+  blkView:(el)=>{ state.blkView=el.dataset.id; state.blkOpen=null; scheduleSaveSettings(); paintTasks(); },
+  blkToggle:(el)=>{ state.blkOpen=state.blkOpen===el.dataset.id?null:el.dataset.id; paintTasks(); },
+  blkClose:()=>openCierreDia(),
+  cierreMove:()=>cierreMoverPendientes(),
+  cierreClose:()=>{ closeModal(); },
+  revSemanal:()=>openRevisionSemanal(),
   blkDate:(el)=>{ state.blocksDate=el.value||today(); state.blockPick=null; paintTasks(); },
   blkDay:(el)=>{ if(!state.blocksDate)state.blocksDate=today(); if(el.dataset.id==='today'){ state.blocksDate=today(); } else { const d=new Date(state.blocksDate+"T00:00"); d.setDate(d.getDate()+(el.dataset.id==='next'?1:-1)); state.blocksDate=d.toISOString().slice(0,10); } state.blockPick=null; render(); },
   blkF:(el)=>{ const b=getBloque(el.dataset.id); if(!b)return; b[el.dataset.f]=el.value; scheduleSaveBloque(b.id); if(el.type==='time')paintTasks(); },
