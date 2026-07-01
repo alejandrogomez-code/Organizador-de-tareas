@@ -151,6 +151,37 @@
   .pick-list{ display:flex; flex-direction:column; gap:5px; max-height:340px; overflow:auto; }
   .pick-row{ display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--line-2); border-radius:7px; cursor:pointer; font-size:.9em; color:var(--tx); }
   .pick-row:hover{ border-color:var(--accent); background:var(--accent-soft); }
+  .vseg button{ padding:5px 9px; font-size:1em; line-height:1; }
+  .blk-compact{ display:flex; flex-direction:column; gap:7px; }
+  .blk-comp-item{ background:var(--panel); border:1px solid var(--line); border-left:4px solid #8b94a3; border-radius:0 var(--radius) var(--radius) 0; box-shadow:var(--shadow); overflow:hidden; }
+  .blk-comp-head{ display:flex; align-items:center; gap:9px; padding:9px 12px; cursor:pointer; }
+  .blk-comp-head:hover{ background:var(--hover); }
+  .blk-comp-head .chev{ color:var(--tx-faint); font-size:.8em; width:12px; }
+  .blk-comp-body{ padding:2px 12px 11px 12px; display:flex; flex-direction:column; gap:5px; border-top:1px solid var(--line-2); }
+  .tl-layout{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:16px; align-items:start; }
+  @media (max-width:860px){ .tl-layout{ grid-template-columns:1fr; } }
+  .tl-wrap{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:10px 12px 10px 0; }
+  .tl-grid{ position:relative; margin-left:52px; }
+  .tl-hour{ position:absolute; left:-52px; right:0; height:0; border-top:1px dashed var(--line); }
+  .tl-hour span{ position:absolute; left:0; top:-8px; font-size:.72em; color:var(--tx-faint); width:44px; text-align:right; }
+  .tl-track{ position:absolute; inset:0; margin-left:6px; }
+  .tl-bar{ position:absolute; left:0; right:6px; border-left:3px solid #8b94a3; border-radius:0 6px 6px 0; padding:4px 8px; overflow:hidden; cursor:pointer; box-sizing:border-box; }
+  .tl-bar:hover{ filter:brightness(.97); outline:1px solid var(--line); }
+  .tl-name{ display:block; font-size:.82em; font-weight:600; color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tl-meta{ display:block; font-size:.72em; color:var(--tx-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tl-now{ position:absolute; left:-52px; right:6px; height:0; border-top:2px solid var(--st-urg); z-index:2; }
+  .tl-now span{ position:absolute; right:6px; top:-8px; font-size:.68em; color:var(--st-urg); background:var(--panel); padding:0 4px; font-weight:600; }
+  .tl-notime{ margin-top:12px; }
+  .tl-detail{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:11px 13px; }
+  .tl-hint{ color:var(--tx-faint); font-size:.86em; padding:20px; text-align:center; border:1px dashed var(--line); border-radius:var(--radius); }
+  .cierre-list,.rev-list{ display:flex; flex-direction:column; gap:6px; max-height:340px; overflow:auto; }
+  .cierre-row{ display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--line-2); border-radius:7px; font-size:.9em; }
+  .rev-item{ display:flex; align-items:center; gap:11px; padding:10px 12px; border:1px solid var(--line-2); border-radius:8px; }
+  .rev-item.ok{ background:var(--panel-2); }
+  .rev-ic{ width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:.9em; flex-shrink:0; }
+  .rev-item.ok .rev-ic{ background:#e8f6ee; color:#15803d; }
+  .rev-n{ font-weight:700; font-size:1.05em; color:var(--tx-dim); min-width:22px; text-align:center; }
+  .rev-n.warn{ color:var(--st-proc); }
   .due-over{ color:var(--st-urg)!important; font-weight:600; } .due-soon{ color:#b4760a!important; font-weight:600; }
   .icon-link{ color:var(--tx-faint); text-decoration:none; font-size:1.05em; } .icon-link:hover{ color:var(--accent); }
   .attach-mini{ font-size:.82em; color:var(--tx-dim); display:inline-flex; align-items:center; gap:4px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
