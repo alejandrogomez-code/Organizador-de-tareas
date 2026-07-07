@@ -655,9 +655,11 @@ function matrizTasks(){ return state.tasks.filter(t=>t.status!=='comp'&&t.status
 function matrizCard(t){
   const st=stMeta(t.status);
   return `<div class="mx-card" draggable="true" data-mx="${t.id}">
-    <button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left;min-width:0">${esc(t.title)}</button>
-    ${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}
-    <span class="status-pill ${st.cls}" style="pointer-events:none">${st.label}</span>
+    <button class="task-title mx-card-title" data-act="open" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>
+    <div class="mx-card-meta">
+      ${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}
+      <span class="status-pill ${st.cls}" style="pointer-events:none">${st.label}</span>
+    </div>
   </div>`;
 }
 function matrizHTML(){
