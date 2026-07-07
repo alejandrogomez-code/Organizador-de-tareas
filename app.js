@@ -96,9 +96,9 @@ function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("sh
 /* ============================================================
    Persistencia (Supabase)
    ============================================================ */
-function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,files:t.files||[],detail:t.detail||null,recur:t.recur||null,subs:t.subs||[]}; }
+function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,files:t.files||[],detail:t.detail||null,recur:t.recur||null,cuad:t.cuad||null,subs:t.subs||[]}; }
 function serObj(o){ return {id:o.id,user_id:UID,tag:o.tag||"",name:o.name||"",area:o.area||null,owner:o.owner||null,status:o.status||"En curso",indicators:o.indicators||[],plan:o.plan||[],reviews:o.reviews||[]}; }
-function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,files:r.files||[],detail:r.detail||"",recur:r.recur||"",subs:r.subs||[]}; }
+function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,files:r.files||[],detail:r.detail||"",recur:r.recur||"",cuad:r.cuad||"",subs:r.subs||[]}; }
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
@@ -264,7 +264,13 @@ function statusCards(list){
 }
 function viewTasks(){
   const f=state.filters;
-  const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button></div>`;
+  const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button><button class="${state.taskView==='matriz'?'on':''}" data-act="taskView" data-id="matriz">▦ Matriz</button></div>`;
+  if(state.taskView==='matriz'){
+    return `<div class="toolbar">${seg}
+      <div class="spacer"></div>
+      <span style="font-size:.82em;color:var(--tx-dim)">Arrastrá cada tarea al cuadrante que le corresponde</span>
+    </div><div id="taskArea"></div>`;
+  }
   if(state.taskView==='bloques'){
     if(!state.blocksDate) state.blocksDate=today();
     const vseg=`<div class="seg vseg" title="Vista de los bloques">${[["agenda","▭","Agenda"],["compacta","≡","Compacta"],["timeline","⌇","Línea horaria"]].map(v=>`<button class="${state.blkView===v[0]?'on':''}" data-act="blkView" data-id="${v[0]}" title="${v[2]}">${v[1]}</button>`).join("")}</div>`;
@@ -318,6 +324,7 @@ function sortList(list){
 function paintTasks(){
   const area=$("#taskArea"); if(!area)return;
   if(state.taskView==='bloques'){ area.innerHTML=bloquesHTML(); bindTaskArea(); wireBloques(); return; }
+  if(state.taskView==='matriz'){ area.innerHTML=matrizHTML(); bindTaskArea(); wireMatriz(); return; }
   const list=filtered();
   if(state.taskView==='kanban'){ if(!list.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas que coincidan con los filtros.</div></div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
   const tl=sortList(visibleTable(list));
@@ -636,6 +643,62 @@ function openRevisionSemanal(){
   openHtmlModal(html);
 }
 
+
+/* ---------- Matriz de Eisenhower ---------- */
+const CUADRANTES = [
+  {key:"hacer",      label:"Hacer ya",   sub:"urgente + importante",     col:"#D85A30", txt:"#993C1D", bg:"#FAECE7"},
+  {key:"planificar", label:"Planificar", sub:"importante, no urgente",   col:"#185FA5", txt:"#0C447C", bg:"#E6F1FB"},
+  {key:"delegar",    label:"Delegar",    sub:"urgente, no importante",   col:"#BA7517", txt:"#854F0B", bg:"#FAEEDA"},
+  {key:"eliminar",   label:"Eliminar",   sub:"ni urgente ni importante", col:"#888780", txt:"#5F5E5A", bg:"#F1EFE8"},
+];
+function matrizTasks(){ return state.tasks.filter(t=>t.status!=='comp'&&t.status!=='desc'); }
+function matrizCard(t){
+  const st=stMeta(t.status);
+  return `<div class="mx-card" draggable="true" data-mx="${t.id}">
+    <button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left;min-width:0">${esc(t.title)}</button>
+    ${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}
+    <span class="status-pill ${st.cls}" style="pointer-events:none">${st.label}</span>
+  </div>`;
+}
+function matrizHTML(){
+  const all=matrizTasks();
+  const sinClasif=all.filter(t=>!CUADRANTES.some(c=>c.key===t.cuad));
+  const cell=c=>{
+    const items=all.filter(t=>t.cuad===c.key);
+    return `<div class="mx-quad" data-cuad="${c.key}" style="border-top-color:${c.col}">
+      <div class="mx-quad-h"><span style="color:${c.txt};font-weight:600">${c.label}</span><span class="mx-quad-sub">${c.sub}</span><span class="mx-quad-n">${items.length}</span></div>
+      <div class="mx-quad-body">${items.map(matrizCard).join("")||`<div class="mx-empty">Soltá tareas acá</div>`}</div>
+    </div>`;
+  };
+  const grid=`<div class="mx-grid">
+    <div class="mx-axis-top"><span></span><span>Urgente</span><span>No urgente</span></div>
+    <div class="mx-axis-left"><span>Importante</span><span>No importante</span></div>
+    <div class="mx-cells">${cell(CUADRANTES[0])}${cell(CUADRANTES[1])}${cell(CUADRANTES[2])}${cell(CUADRANTES[3])}</div>
+  </div>`;
+  const tray=`<div class="mx-tray" data-cuad="">
+    <div class="mx-tray-h"><span style="font-weight:600">Sin clasificar</span><span class="mx-quad-n">${sinClasif.length}</span></div>
+    <div class="mx-tray-sub">Arrastrá a un cuadrante</div>
+    <div class="mx-tray-body">${sinClasif.map(matrizCard).join("")||`<div class="mx-empty">¡Todo clasificado!</div>`}</div>
+  </div>`;
+  const counts=`<div class="mx-counts">${CUADRANTES.map(c=>{ const n=all.filter(t=>t.cuad===c.key).length; return `<div class="mx-count" style="border-top:2px solid ${c.col}"><div class="mx-count-n" style="color:${c.txt}">${n}</div><div class="mx-count-l">${c.label}</div></div>`; }).join("")}</div>`;
+  return `${counts}<div class="mx-layout">${grid}${tray}</div>`;
+}
+function wireMatriz(){
+  let dragId=null;
+  document.querySelectorAll('.mx-card').forEach(c=>{
+    c.addEventListener('dragstart',e=>{ dragId=c.dataset.mx; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
+    c.addEventListener('dragend',()=>{ c.style.opacity=''; });
+  });
+  document.querySelectorAll('[data-cuad]').forEach(zone=>{
+    zone.addEventListener('dragover',e=>{ e.preventDefault(); zone.classList.add('mx-over'); });
+    zone.addEventListener('dragleave',()=>zone.classList.remove('mx-over'));
+    zone.addEventListener('drop',e=>{ e.preventDefault(); zone.classList.remove('mx-over');
+      if(!dragId)return; const t=state.tasks.find(x=>x.id===dragId); if(!t){dragId=null;return;}
+      const nc=zone.dataset.cuad; if(t.cuad!==nc){ t.cuad=nc; scheduleSaveTask(t.id); }
+      dragId=null; paintTasks();
+    });
+  });
+}
 
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
 function refreshTasks(){ if(state.view==='tareas') paintTasks(); else render(); }
