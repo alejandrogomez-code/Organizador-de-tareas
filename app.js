@@ -26,17 +26,25 @@ const monthLabel = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1])
 const shortM = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1]).slice(0,3)+" '"+y.slice(2); };
 
 const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
-const CARD_STYLE = {objetivos:{bg:"#eef1ff",fg:"#4453c4"},tareas:{bg:"#e8f6ee",fg:"#15803d"},admin:{bg:"#fdf3e2",fg:"#b4760a"},calidad:{bg:"#f3eefe",fg:"#7b4fd0"},logistica:{bg:"#e6f3fb",fg:"#1f7bb6"},sistemas:{bg:"#eef0f3",fg:"#5b6471"},leex:{bg:"#e9f7f3",fg:"#0f8a6e"}};
+const CARD_STYLE = {
+  objetivos:{bg:"#eef1ff",fg:"#4453c4",solid:"#534AB7",tint:"#CECBF6",bar:"#7F77DD"},
+  tareas:   {bg:"#e8f6ee",fg:"#15803d",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
+  admin:    {bg:"#fdf3e2",fg:"#b4760a",solid:"#185FA5",tint:"#B5D4F4",bar:"#378ADD"},
+  calidad:  {bg:"#f3eefe",fg:"#7b4fd0",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
+  logistica:{bg:"#e6f3fb",fg:"#1f7bb6",solid:"#BA7517",tint:"#FAC775",bar:"#BA7517"},
+  sistemas: {bg:"#eef0f3",fg:"#5b6471",solid:"#534AB7",tint:"#CECBF6",bar:"#7F77DD"},
+  leex:     {bg:"#e9f7f3",fg:"#0f8a6e",solid:"#0C447C",tint:"#85B7EB",bar:"#378ADD"},
+};
 
 /* ---------- Paletas ---------- */
 const PALETTES = {
   grafito:{ name:"Grafito", vars:{"--bg":"#f4f5f7","--panel":"#ffffff","--panel-2":"#fafbfc","--hover":"#fafbfd","--sidebar":"#21262e","--sidebar-2":"#2a313b","--sidebar-tx":"#b8c0cc","--sidebar-tx-dim":"#79828f","--line":"#e4e7eb","--line-2":"#eef0f3","--tx":"#1f2430","--tx-dim":"#6b7280","--tx-faint":"#9aa1ac","--accent":"#4c5bd4","--accent-soft":"#eceefb"} },
   indigo:{ name:"Índigo claro", vars:{"--bg":"#f3f4fb","--panel":"#ffffff","--panel-2":"#f7f8fe","--hover":"#f6f7fe","--sidebar":"#2b2f6b","--sidebar-2":"#363b80","--sidebar-tx":"#c3c8f0","--sidebar-tx-dim":"#878dc4","--line":"#e3e5f3","--line-2":"#edeefa","--tx":"#1e2140","--tx-dim":"#5d6184","--tx-faint":"#9a9ec0","--accent":"#5b5bd6","--accent-soft":"#e9e9fb"} },
-  bosque:{ name:"Bosque", vars:{"--bg":"#f3f6f3","--panel":"#ffffff","--panel-2":"#f7faf7","--hover":"#f6faf6","--sidebar":"#1f2a25","--sidebar-2":"#293831","--sidebar-tx":"#b6c6bd","--sidebar-tx-dim":"#7a8c82","--line":"#e0e8e2","--line-2":"#eaf1ec","--tx":"#1c2722","--tx-dim":"#5b6b62","--tx-faint":"#97a59d","--accent":"#2f8f6b","--accent-soft":"#e3f3ec"} },
+  bosque:{ name:"Bosque", vars:{"--bg":"#f2f6f4","--panel":"#ffffff","--panel-2":"#f7faf8","--hover":"#f4faf7","--sidebar":"#04342C","--sidebar-2":"#0F6E56","--sidebar-tx":"#9FE1CB","--sidebar-tx-dim":"#5DCAA5","--line":"#e0e8e3","--line-2":"#eaf1ed","--tx":"#1c2722","--tx-dim":"#5b6b62","--tx-faint":"#97a59d","--accent":"#1D9E75","--accent-soft":"#E1F5EE"} },
   arena:{ name:"Arena", vars:{"--bg":"#f6f3ee","--panel":"#fffdf9","--panel-2":"#f9f5ef","--hover":"#f8f4ed","--sidebar":"#34302a","--sidebar-2":"#403a32","--sidebar-tx":"#cbc2b4","--sidebar-tx-dim":"#8f8676","--line":"#e8e1d6","--line-2":"#f0ebe2","--tx":"#2c2820","--tx-dim":"#6b6457","--tx-faint":"#a59d8e","--accent":"#b06a3c","--accent-soft":"#f5e7da"} },
   pizarra:{ name:"Pizarra (oscuro)", vars:{"--bg":"#161a20","--panel":"#1e232b","--panel-2":"#242a33","--hover":"#232932","--sidebar":"#12151a","--sidebar-2":"#1c212a","--sidebar-tx":"#aeb6c2","--sidebar-tx-dim":"#6b7480","--line":"#2c333d","--line-2":"#262c35","--tx":"#e7eaef","--tx-dim":"#a6adb8","--tx-faint":"#7a828d","--accent":"#6f7ce6","--accent-soft":"#272d4a"} },
 };
-function applyTheme(key){ const p = PALETTES[key] || PALETTES.grafito; for(const[k,v] of Object.entries(p.vars)) document.documentElement.style.setProperty(k,v); state.theme = PALETTES[key]?key:"grafito"; }
+function applyTheme(key){ const p = PALETTES[key] || PALETTES.bosque; for(const[k,v] of Object.entries(p.vars)) document.documentElement.style.setProperty(k,v); state.theme = PALETTES[key]?key:"bosque"; }
 
 /* ---------- Secciones operativas ---------- */
 // Qué áreas (de Seguimiento de Tareas) agrupa cada sección.
@@ -60,14 +68,14 @@ const DEFAULTS = {
   areas:["Administración","Contabilidad","Finanzas","Marketing","Calidad","Logística","Compras","Sistemas","LEEX"],
   responsables:["Alejandro","Diego","Leandro","Claudio"],
   shortcuts:[{ic:"📅",label:"Notion Calendar",url:"#",section:"dashboard"},{ic:"✉️",label:"Correo",url:"#",section:"dashboard"},{ic:"🗂️",label:"Notion",url:"#",section:"dashboard"},{ic:"📊",label:"Odoo",url:"#",section:"dashboard"}],
-  theme:"grafito",
+  theme:"bosque",
 };
 const state = {
   view:"dashboard", taskView:"tabla", scale:1, seq:1,
   sort:{col:"n",dir:"asc"}, group:"", showDone:false,
   objSel:null, objReviewMonth:null, objFilterArea:"", justSavedReview:null,
   secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
-  areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"grafito",
+  areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
   blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
@@ -158,7 +166,7 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"grafito"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -200,6 +208,7 @@ function render(){
   else if(OPS_ENABLED.includes(state.view)) c.innerHTML=sectionView(state.view);
   else c.innerHTML=viewPlaceholder(sec);
   bindContent();
+  animateCounters(c);
 }
 
 /* event delegation para el contenido renderizado por innerHTML */
@@ -233,14 +242,47 @@ function viewDashboard(){
     meetingWidget=`<h3>Próxima reunión</h3><div style="color:var(--tx-faint);font-size:.9em;padding:6px 0">No hay reuniones próximas cargadas. Registralas en cada sección.</div>`;
   }
   const cards=SECTIONS.filter(s=>s.id!=="dashboard").map(s=>{
-    const cs=CARD_STYLE[s.id]||{bg:"#eef0f3",fg:"#5b6471"};
-    let stat=`<div class="stat" style="color:var(--tx-faint)">En construcción</div>`;
-    if(s.id==="tareas")stat=`<div class="stat"><b>${pend}</b> pendientes</div>`;
-    else if(s.id==="objetivos")stat=`<div class="stat"><b>${state.objetivos.length}</b> en seguimiento</div>`;
-    else if(OPS_ENABLED.includes(s.id)){ const areas=SECTION_AREAS[s.id]||[]; const tp=state.tasks.filter(t=>areas.includes(t.area)&&!["comp","desc"].includes(t.status)).length; const vp=state.vencimientos.filter(v=>v.area===s.id&&v.status!=='ok'&&v.due&&v.due<today()).length; stat=`<div class="stat"><b>${tp}</b> tareas · ${vp?`<b style="color:var(--st-urg)">${vp}</b> vencidas`:'0 vencidas'}</div>`; }
-    return `<button class="card" data-act="goCard" data-id="${s.id}"><div class="ico" style="background:${cs.bg};color:${cs.fg}">${s.ic}</div><h4>${esc(s.label)}</h4>${stat}</button>`;
+    const cs=CARD_STYLE[s.id]||{bg:"#eef0f3",fg:"#5b6471",solid:"#5F5E5A",tint:"#D3D1C7",bar:"#888780"};
+    let sub="En construcción", pct=null, urg=0;
+    if(s.id==="tareas"){
+      const done=state.tasks.filter(t=>t.status==='comp').length, tot=state.tasks.length;
+      urg=state.tasks.filter(t=>t.status==='urg').length;
+      sub=`${pend} pendientes`; pct=tot?Math.round(done/tot*100):0;
+    } else if(s.id==="objetivos"){
+      const os=state.objetivos; const avg=os.length?Math.round(os.reduce((a,o)=>a+objAvance(o),0)/os.length):0;
+      sub=`${os.length} en seguimiento`; pct=avg;
+    } else if(OPS_ENABLED.includes(s.id)){
+      const areas=SECTION_AREAS[s.id]||[];
+      const all=state.tasks.filter(t=>areas.includes(t.area));
+      const done=all.filter(t=>t.status==='comp').length;
+      urg=all.filter(t=>t.status==='urg').length;
+      const tp=all.filter(t=>!["comp","desc"].includes(t.status)).length;
+      sub=`${done} de ${all.length} completadas`; pct=all.length?Math.round(done/all.length*100):0;
+      if(!all.length)sub=`${tp} tareas`;
+    }
+    const bar=pct===null?"":`<div class="cbar"><i style="width:${pct}%;background:${cs.bar}"></i></div>`;
+    const badge=urg?`<span class="curg">${urg} urgente${urg===1?'':'s'}</span>`:'';
+    return `<button class="card" data-act="goCard" data-id="${s.id}">
+      <div class="chead" style="background:${cs.solid}">
+        <span class="cblob cblob-1"></span><span class="cblob cblob-2"></span>
+        <span class="cico" style="color:${cs.tint}">${s.ic}</span>
+      </div>
+      <div class="cbody">
+        <div class="ctitle"><h4>${esc(s.label)}</h4>${badge}</div>
+        <div class="stat">${sub}</div>
+        ${bar}
+      </div>
+    </button>`;
   }).join("");
-  return `<div class="dash-top">
+  const nUrg=state.tasks.filter(t=>t.status==='urg').length;
+  const hh=new Date().getHours();
+  const saludo=hh<13?"Buenos días":(hh<20?"Buenas tardes":"Buenas noches");
+  const hoyTxt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"});
+  const hero=`<div class="dash-hero">
+    <p class="dh-t">${saludo}</p>
+    <p class="dh-s"><span style="text-transform:capitalize">${esc(hoyTxt)}</span>${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> tarea${nUrg===1?'':'s'} urgente${nUrg===1?'':'s'}`:' · sin urgencias'}</p>
+  </div>`;
+  return `${hero}<div class="dash-top">
     <div class="widget">${meetingWidget}</div>
     <div class="widget"><h3>Accesos directos</h3><div class="shortcuts">${sc}</div><button class="btn-ghost" data-act="revSemanal" style="margin-top:12px;width:100%">✓ Revisión semanal</button></div>
   </div><div class="section-h">Secciones</div><div class="cards">${cards}</div>`;
@@ -254,13 +296,24 @@ function optionList(arr,sel,empty){ return `<option value="">${empty}</option>`+
 function statusCards(list){
   const c={sin:0,proc:0,urg:0,comp:0};
   list.forEach(t=>{ if(c[t.status]!==undefined)c[t.status]++; });
-  const card=(cls,label,n)=>`<div class="sumcard ${cls}"><span class="sc-label">${label}</span><span class="sc-num">${n}</span></div>`;
+  const card=(cls,label,n,i)=>`<div class="sumcard ${cls}" style="animation-delay:${i*70}ms"><span class="sc-label">${label}</span><span class="sc-num" data-count="${n}">0</span></div>`;
   return `<div class="sumcards">
-    ${card('sc-sin','Sin iniciar',c.sin)}
-    ${card('sc-proc','En proceso',c.proc)}
-    ${card('sc-urg','Urgentes',c.urg)}
-    ${card('sc-comp','Completado',c.comp)}
+    ${card('sc-sin','Sin iniciar',c.sin,0)}
+    ${card('sc-proc','En proceso',c.proc,1)}
+    ${card('sc-urg','Urgentes',c.urg,2)}
+    ${card('sc-comp','Completado',c.comp,3)}
   </div>`;
+}
+function animateCounters(root){
+  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    (root||document).querySelectorAll("[data-count]").forEach(el=>el.textContent=el.dataset.count); return;
+  }
+  (root||document).querySelectorAll("[data-count]").forEach(el=>{
+    const to=parseInt(el.dataset.count,10)||0; if(!to){ el.textContent="0"; return; }
+    let start=null; const dur=750;
+    const step=ts=>{ if(!start)start=ts; const p=Math.min((ts-start)/dur,1); const e=1-Math.pow(1-p,3); el.textContent=Math.round(to*e); if(p<1)requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
 }
 function viewTasks(){
   const f=state.filters;
@@ -667,9 +720,9 @@ function matrizHTML(){
   const sinClasif=all.filter(t=>!CUADRANTES.some(c=>c.key===t.cuad));
   const cell=c=>{
     const items=all.filter(t=>t.cuad===c.key);
-    return `<div class="mx-quad" data-cuad="${c.key}" style="border-top-color:${c.col}">
-      <div class="mx-quad-h"><span style="color:${c.txt};font-weight:600">${c.label}</span><span class="mx-quad-sub">${c.sub}</span><span class="mx-quad-n">${items.length}</span></div>
-      <div class="mx-quad-body">${items.map(matrizCard).join("")||`<div class="mx-empty">Soltá tareas acá</div>`}</div>
+    return `<div class="mx-quad" data-cuad="${c.key}" style="background:${c.bg};color:${c.col}">
+      <div class="mx-quad-h"><span style="color:${c.txt};font-weight:600">${c.label}</span><span class="mx-quad-sub" style="color:${c.txt};opacity:.65">${c.sub}</span><span class="mx-quad-n" style="color:${c.txt}">${items.length}</span></div>
+      <div class="mx-quad-body">${items.map(matrizCard).join("")||`<div class="mx-empty" style="border-color:${c.col};color:${c.txt};opacity:.6">Soltá tareas acá</div>`}</div>
     </div>`;
   };
   const grid=`<div class="mx-grid">
@@ -703,7 +756,15 @@ function wireMatriz(){
 }
 
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
-function refreshTasks(){ if(state.view==='tareas') paintTasks(); else render(); }
+function refreshSumCards(){
+  const wrap=document.querySelector(".sumcards"); if(!wrap)return;
+  if(state.taskView==='bloques'||state.taskView==='matriz')return;
+  const c={sin:0,proc:0,urg:0,comp:0};
+  filtered().forEach(t=>{ if(c[t.status]!==undefined)c[t.status]++; });
+  const order=[["sc-sin",c.sin],["sc-proc",c.proc],["sc-urg",c.urg],["sc-comp",c.comp]];
+  order.forEach(([cls,n])=>{ const el=wrap.querySelector("."+cls+" .sc-num"); if(el){ el.textContent=n; el.dataset.count=n; } });
+}
+function refreshTasks(){ if(state.view==='tareas'){ paintTasks(); refreshSumCards(); } else render(); }
 function setField(id,field,val){ const t=state.tasks.find(x=>x.id===id); if(!t)return; const prev=t[field]; t[field]=val; if(field==='status'&&val==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(id); refreshTasks(); }
 function addTask(){ const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:"",resp:"",obj:"",url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); paintTasks(); openModal(t.id); }
 function newTaskForObj(tag){ const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:"",resp:"",obj:tag,url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); openModal(t.id); }
@@ -765,7 +826,7 @@ function closeModal(){ $("#overlay").classList.remove("show"); modalId=null; if(
 /* ============================================================
    OBJETIVOS
    ============================================================ */
-function objAvance(o){ let sched=0,done=0; o.plan.forEach(a=>Object.values(a.months).forEach(v=>{ if(v){sched++; if(v==='cump')done++;} })); return sched?Math.round(done/sched*100):0; }
+function objAvance(o){ let sched=0,done=0; (o&&o.plan||[]).forEach(a=>Object.values((a&&a.months)||{}).forEach(v=>{ if(v){sched++; if(v==='cump')done++;} })); return sched?Math.round(done/sched*100):0; }
 function objStatusBadge(s){ const m=OBJ_STATUS.find(x=>x[0]===s)||OBJ_STATUS[0]; return `<span style="display:inline-flex;align-items:center;gap:6px;background:${m[2]};color:${m[1]};border-radius:20px;padding:3px 10px;font-size:.92em;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:currentColor"></span>${s}</span>`; }
 function avanceBar(p){ return `<div style="display:flex;align-items:center;gap:7px"><div style="width:70px;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden"><div style="height:100%;width:${p}%;background:var(--accent)"></div></div><span style="font-size:.86em;color:var(--tx-dim)">${p}%</span></div>`; }
 
@@ -1309,7 +1370,7 @@ function setupShell(){
 }
 
 /* init */
-applyTheme("grafito");
+applyTheme("bosque");
 setupAuthUI();
 setupShell();
 if(!CONFIGURED){
