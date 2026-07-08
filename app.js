@@ -305,14 +305,21 @@ function statusCards(list){
   </div>`;
 }
 function animateCounters(root){
-  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches){
-    (root||document).querySelectorAll("[data-count]").forEach(el=>el.textContent=el.dataset.count); return;
+  const R=root||document;
+  const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce){
+    R.querySelectorAll("[data-count]").forEach(el=>el.textContent=el.dataset.count);
+    R.querySelectorAll(".ar-fg[data-off]").forEach(c=>c.setAttribute("stroke-dashoffset",c.dataset.off));
+    return;
   }
-  (root||document).querySelectorAll("[data-count]").forEach(el=>{
+  R.querySelectorAll("[data-count]").forEach(el=>{
     const to=parseInt(el.dataset.count,10)||0; if(!to){ el.textContent="0"; return; }
     let start=null; const dur=750;
     const step=ts=>{ if(!start)start=ts; const p=Math.min((ts-start)/dur,1); const e=1-Math.pow(1-p,3); el.textContent=Math.round(to*e); if(p<1)requestAnimationFrame(step); };
     requestAnimationFrame(step);
+  });
+  R.querySelectorAll(".ar-fg[data-off]").forEach(c=>{
+    requestAnimationFrame(()=>requestAnimationFrame(()=>c.setAttribute("stroke-dashoffset",c.dataset.off)));
   });
 }
 function viewTasks(){
@@ -832,7 +839,18 @@ function closeModal(){ $("#overlay").classList.remove("show"); modalId=null; if(
    ============================================================ */
 function objAvance(o){ let sched=0,done=0; (o&&o.plan||[]).forEach(a=>Object.values((a&&a.months)||{}).forEach(v=>{ if(v){sched++; if(v==='cump')done++;} })); return sched?Math.round(done/sched*100):0; }
 function objStatusBadge(s){ const m=OBJ_STATUS.find(x=>x[0]===s)||OBJ_STATUS[0]; return `<span style="display:inline-flex;align-items:center;gap:6px;background:${m[2]};color:${m[1]};border-radius:20px;padding:3px 10px;font-size:.92em;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:currentColor"></span>${s}</span>`; }
-function avanceBar(p){ return `<div style="display:flex;align-items:center;gap:7px"><div style="width:70px;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden"><div style="height:100%;width:${p}%;background:var(--accent)"></div></div><span style="font-size:.86em;color:var(--tx-dim)">${p}%</span></div>`; }
+function avanceColor(p){ return p>=75?"#1D9E75":(p>=40?"#BA7517":(p>0?"#D85A30":"#b4b2a9")); }
+function avanceRing(p){
+  const r=18, C=2*Math.PI*r, off=C*(1-Math.max(0,Math.min(100,p))/100), col=avanceColor(p);
+  return `<div class="aring" title="${p}% de avance">
+    <svg viewBox="0 0 44 44" width="44" height="44" role="img" aria-label="Avance ${p}%">
+      <circle class="ar-bg" cx="22" cy="22" r="${r}" fill="none" stroke-width="4"></circle>
+      <circle class="ar-fg" cx="22" cy="22" r="${r}" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round"
+        stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}" data-off="${off.toFixed(1)}" transform="rotate(-90 22 22)"></circle>
+    </svg>
+    <span class="ar-num" style="color:${col}"><b data-count="${p}">0</b><i>%</i></span>
+  </div>`;
+}
 
 function objList(){
   const list=state.objetivos.filter(o=>!state.objFilterArea||o.area===state.objFilterArea);
@@ -842,7 +860,7 @@ function objList(){
     <td><button class="task-title" data-act="openObj" data-id="${o.id}">${esc(o.name)}</button></td>
     <td>${o.owner?esc(o.owner):'<span style="color:var(--tx-faint)">—</span>'}</td>
     <td>${objStatusBadge(o.status)}</td>
-    <td>${avanceBar(objAvance(o))}</td></tr>`).join("");
+    <td>${avanceRing(objAvance(o))}</td></tr>`).join("");
   return `<div class="toolbar">
     <div class="filters"><select data-act="objArea">${optionList(state.areas,state.objFilterArea,"Todas las áreas")}</select></div>
     <div class="spacer"></div><button class="btn-primary" data-act="addObj">＋ Nuevo objetivo</button>
