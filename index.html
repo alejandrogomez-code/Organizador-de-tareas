@@ -125,6 +125,13 @@
   table.tasks tbody td{ padding:6px 10px; border-bottom:1px solid var(--line-2); vertical-align:middle; }
   table.tasks tbody tr{ box-shadow:inset 2px 0 0 transparent; transition:background .14s ease,box-shadow .14s ease; }
   table.tasks tbody tr:hover{ background:var(--hover); box-shadow:inset 2px 0 0 var(--accent); }
+  .aring{ position:relative; width:44px; height:44px; display:inline-grid; place-items:center; }
+  .aring svg{ display:block; transform:translateZ(0); }
+  .aring .ar-bg{ stroke:var(--line-2); }
+  .aring .ar-fg{ transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1); }
+  .aring .ar-num{ position:absolute; font-size:.78em; font-weight:700; line-height:1; letter-spacing:-.2px; }
+  .aring .ar-num i{ font-style:normal; font-size:.72em; font-weight:600; opacity:.7; }
+  @media (prefers-reduced-motion:reduce){ .aring .ar-fg{ transition:none; } }
   tr.group-row td{ background:var(--panel-2); font-weight:700; color:var(--tx-dim); font-size:.86em; text-transform:uppercase; letter-spacing:.5px; padding:7px 10px; }
   td.num{ color:var(--tx-faint); font-variant-numeric:tabular-nums; width:42px; }
   td.date{ color:var(--tx-dim); white-space:nowrap; font-variant-numeric:tabular-nums; }
