@@ -707,11 +707,11 @@ const CUADRANTES = [
 function matrizTasks(){ return state.tasks.filter(t=>t.status!=='comp'&&t.status!=='desc'); }
 function matrizCard(t){
   const st=stMeta(t.status);
-  return `<div class="mx-card" draggable="true" data-mx="${t.id}">
-    <button class="task-title mx-card-title" data-act="open" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</button>
+  return `<div class="mx-card" draggable="true" data-mx="${t.id}" tabindex="0" role="button" title="${esc(t.title)} — clic para abrir, arrastrá para mover">
+    <span class="mx-card-title">${esc(t.title)}</span>
     <div class="mx-card-meta">
       ${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}
-      <span class="status-pill ${st.cls}" style="pointer-events:none">${st.label}</span>
+      <span class="status-pill ${st.cls}">${st.label}</span>
     </div>
   </div>`;
 }
@@ -739,10 +739,14 @@ function matrizHTML(){
   return `${counts}<div class="mx-layout">${grid}${tray}</div>`;
 }
 function wireMatriz(){
-  let dragId=null;
+  let dragId=null, wasDragged=false, downX=0, downY=0;
   document.querySelectorAll('.mx-card').forEach(c=>{
-    c.addEventListener('dragstart',e=>{ dragId=c.dataset.mx; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
+    c.addEventListener('pointerdown',e=>{ wasDragged=false; downX=e.clientX; downY=e.clientY; });
+    c.addEventListener('pointermove',e=>{ if(e.buttons&&(Math.abs(e.clientX-downX)>4||Math.abs(e.clientY-downY)>4)) wasDragged=true; });
+    c.addEventListener('dragstart',e=>{ dragId=c.dataset.mx; wasDragged=true; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
     c.addEventListener('dragend',()=>{ c.style.opacity=''; });
+    c.addEventListener('click',()=>{ if(wasDragged){ wasDragged=false; return; } openModal(c.dataset.mx); });
+    c.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openModal(c.dataset.mx); } });
   });
   document.querySelectorAll('[data-cuad]').forEach(zone=>{
     zone.addEventListener('dragover',e=>{ e.preventDefault(); zone.classList.add('mx-over'); });
