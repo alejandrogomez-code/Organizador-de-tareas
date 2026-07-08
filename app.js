@@ -25,16 +25,24 @@ const MONTHS = monthRange();
 const monthLabel = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1])+" "+y; };
 const shortM = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1]).slice(0,3)+" '"+y.slice(2); };
 
-const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
+const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"mesa",label:"Mesa Ejecutiva",ic:"⚑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
 const CARD_STYLE = {
   objetivos:{bg:"#eef1ff",fg:"#4453c4",solid:"#534AB7",tint:"#CECBF6",bar:"#7F77DD"},
   tareas:   {bg:"#e8f6ee",fg:"#15803d",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
+  mesa:     {bg:"#fbeaf0",fg:"#993556",solid:"#993556",tint:"#F4C0D1",bar:"#D4537E"},
   admin:    {bg:"#fdf3e2",fg:"#b4760a",solid:"#185FA5",tint:"#B5D4F4",bar:"#378ADD"},
   calidad:  {bg:"#f3eefe",fg:"#7b4fd0",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
   logistica:{bg:"#e6f3fb",fg:"#1f7bb6",solid:"#BA7517",tint:"#FAC775",bar:"#BA7517"},
   sistemas: {bg:"#eef0f3",fg:"#5b6471",solid:"#534AB7",tint:"#CECBF6",bar:"#7F77DD"},
   leex:     {bg:"#e9f7f3",fg:"#0f8a6e",solid:"#0C447C",tint:"#85B7EB",bar:"#378ADD"},
 };
+const FOROS_DEFAULT = [
+  {id:"diego", label:"1:1 Diego (CEO)", col:"#534AB7"},
+  {id:"cesar", label:"1:1 César (Dueño)", col:"#185FA5"},
+  {id:"mesa",  label:"Mesa ejecutiva", col:"#0F6E56"},
+];
+function foros(){ return (state.foros&&state.foros.length)?state.foros:FOROS_DEFAULT; }
+function foroById(id){ return foros().find(f=>f.id===id)||null; }
 
 /* ---------- Paletas ---------- */
 const PALETTES = {
@@ -79,6 +87,7 @@ const state = {
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
   blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
+  foros:[], mesaFiltro:"", mesaTab:"reuniones",
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
@@ -110,8 +119,8 @@ function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
-function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||null}; }
-function deReu(r){ return {id:r.id,area:r.area||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
+function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,tipo:r.tipo||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||null}; }
+function deReu(r){ return {id:r.id,area:r.area||"",tipo:r.tipo||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:(r.compromisos||[]).map(c=>({t:c.t||"",done:!!c.done,taskId:c.taskId||null,resp:c.resp||"",due:c.due||""})),urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
 function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titulo||"",categoria:d.categoria||null,url:d.url||null,files:d.files||[],nota:d.nota||null,fecha:d.fecha||null}; }
 function deDoc(r){ return {id:r.id,area:r.area||"",titulo:r.titulo||"",categoria:r.categoria||"",url:r.url||"",files:r.files||[],nota:r.nota||"",fecha:r.fecha||""}; }
 function serBloque(b){ return {id:b.id,user_id:UID,fecha:b.fecha||null,nombre:b.nombre||"",inicio:b.inicio||null,fin:b.fin||null,orden:b.orden||0,tareas:b.tareas||[]}; }
@@ -126,7 +135,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -166,7 +175,7 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -205,6 +214,7 @@ function render(){
   else if(state.view==="tareas"){ c.innerHTML=viewTasks(); paintTasks(); }
   else if(state.view==="objetivos") c.innerHTML=state.objSel?objDetail(getObjById(state.objSel)):objList();
   else if(state.view==="config") c.innerHTML=viewConfig();
+  else if(state.view==="mesa") c.innerHTML=viewMesa();
   else if(OPS_ENABLED.includes(state.view)) c.innerHTML=sectionView(state.view);
   else c.innerHTML=viewPlaceholder(sec);
   bindContent();
@@ -251,6 +261,13 @@ function viewDashboard(){
     } else if(s.id==="objetivos"){
       const os=state.objetivos; const avg=os.length?Math.round(os.reduce((a,o)=>a+objAvance(o),0)/os.length):0;
       sub=`${os.length} en seguimiento`; pct=avg;
+    } else if(s.id==="mesa"){
+      const ab=mesaOpenComps(); const vz=ab.filter(x=>compVencido(x.c)).length;
+      const total=mesaReuniones().reduce((n,r)=>n+(r.compromisos||[]).length,0);
+      const done=mesaReuniones().reduce((n,r)=>n+(r.compromisos||[]).filter(c=>c.done).length,0);
+      urg=vz;
+      sub=total?`${done} de ${total} compromisos`:`${mesaReuniones().length} reuniones`;
+      pct=total?Math.round(done/total*100):0;
     } else if(OPS_ENABLED.includes(s.id)){
       const areas=SECTION_AREAS[s.id]||[];
       const all=state.tasks.filter(t=>areas.includes(t.area));
@@ -261,7 +278,8 @@ function viewDashboard(){
       if(!all.length)sub=`${tp} tareas`;
     }
     const bar=pct===null?"":`<div class="cbar"><i style="width:${pct}%;background:${cs.bar}"></i></div>`;
-    const badge=urg?`<span class="curg">${urg} urgente${urg===1?'':'s'}</span>`:'';
+    const uw=s.id==='mesa'?'vencido':'urgente';
+    const badge=urg?`<span class="curg">${urg} ${uw}${urg===1?'':'s'}</span>`:'';
     return `<button class="card" data-act="goCard" data-id="${s.id}">
       <div class="chead" style="background:${cs.solid}">
         <span class="cblob cblob-1"></span><span class="cblob cblob-2"></span>
@@ -1043,8 +1061,8 @@ function sectionVenc(secId){
 
 /* ---------- Reuniones ---------- */
 function addReunion(secId){ const r={id:crypto.randomUUID(),area:secId,fecha:today(),titulo:"",participantes:"",temas:"",decisiones:"",compromisos:[],proxima:""}; state.reuniones.unshift(r); saveReuNow(r.id); state.reuSel=r.id; render(); }
-function readReuForm(r){ const g=id=>{const e=$("#"+id);return e?e.value:undefined;}; const map={reu_titulo:'titulo',reu_fecha:'fecha',reu_part:'participantes',reu_temas:'temas',reu_dec:'decisiones',reu_prox:'proxima'}; for(const[el,fld] of Object.entries(map)){ const v=g(el); if(v!==undefined)r[fld]=v; } }
-function taskFromCompromiso(i){ const r=getReu(state.reuSel); if(!r)return; const c=r.compromisos[i]; if(!c||!c.t.trim()){toast("Escribí el compromiso primero");return;} const areas=SECTION_AREAS[r.area]||[]; const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:c.t.trim(),status:"sin",due:"",area:areas[0]||"",resp:"",obj:"",url:"",file:null,detail:"Compromiso de reunión: "+(r.titulo||fmt(r.fecha)),recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); c.taskId=t.id; readReuForm(r); scheduleSaveReu(r.id); render(); toast("Tarea creada en Seguimiento"); }
+function readReuForm(r){ if(r&&r.area==='mesa')return readMesaForm(r); const g=id=>{const e=$("#"+id);return e?e.value:undefined;}; const map={reu_titulo:'titulo',reu_fecha:'fecha',reu_part:'participantes',reu_temas:'temas',reu_dec:'decisiones',reu_prox:'proxima'}; for(const[el,fld] of Object.entries(map)){ const v=g(el); if(v!==undefined)r[fld]=v; } }
+function taskFromCompromiso(i){ const r=getReu(state.reuSel); if(!r)return; const c=r.compromisos[i]; if(!c||!c.t.trim()){toast("Escribí el compromiso primero");return;} if(r.area==='mesa'&&!(c.resp&&MY_NAMES.some(n=>c.resp.toLowerCase().includes(n)))){toast("Solo podés crear tareas de tus propios compromisos.");return;} if(c.taskId&&state.tasks.some(t=>t.id===c.taskId)){toast("Ya existe la tarea de este compromiso.");return;} const areas=SECTION_AREAS[r.area]||[]; const foro=r.area==='mesa'?(foroById(r.tipo)||{}).label:''; const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:c.t.trim(),status:"sin",due:c.due||"",area:areas[0]||"",resp:c.resp||"",obj:"",url:"",file:null,detail:"Compromiso de reunión: "+(r.titulo||fmt(r.fecha))+(foro?" ("+foro+")":""),recur:"",subs:[],cuad:""}; state.tasks.unshift(t); saveTaskNow(t.id); c.taskId=t.id; readReuForm(r); scheduleSaveReu(r.id); render(); toast("Tarea creada en Seguimiento"); }
 function sectionReuniones(secId){
   if(state.reuSel) return reunionEditor(secId,getReu(state.reuSel));
   const list=state.reuniones.filter(r=>r.area===secId).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1);
@@ -1094,6 +1112,138 @@ function reunionEditor(secId,r){
     <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
     <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="reuBack">Listo</button></div>
   </div>`;
+}
+
+/* ---------- Mesa Ejecutiva ---------- */
+function mesaReuniones(){ return state.reuniones.filter(r=>r.area==='mesa'); }
+function compAbierto(c){ return !c.done && (c.t||"").trim(); }
+function compVencido(c){ return compAbierto(c) && c.due && c.due < today(); }
+function mesaOpenComps(){
+  const out=[];
+  mesaReuniones().forEach(r=>(r.compromisos||[]).forEach((c,i)=>{ if(compAbierto(c)) out.push({r,c,i}); }));
+  return out.sort((a,b)=>{ const ad=a.c.due||"9999-99-99", bd=b.c.due||"9999-99-99"; return ad<bd?-1:(ad>bd?1:0); });
+}
+function partList(r){ return (r.participantes||"").split(",").map(s=>s.trim()).filter(Boolean); }
+function viewMesa(){
+  if(state.reuSel && getReu(state.reuSel) && getReu(state.reuSel).area==='mesa') return mesaEditor(getReu(state.reuSel));
+  const abiertos=mesaOpenComps();
+  const venc=abiertos.filter(x=>compVencido(x.c)).length;
+  const pendTemas=mesaReuniones().filter(r=>(r.pend||"").trim()).length;
+  const tabs=`<div class="seg"><button class="${state.mesaTab==='reuniones'?'on':''}" data-act="mesaTab" data-id="reuniones">▤ Reuniones</button><button class="${state.mesaTab==='comp'?'on':''}" data-act="mesaTab" data-id="comp">☑ Compromisos abiertos${abiertos.length?` (${abiertos.length})`:''}</button></div>`;
+  const head=`<div class="mesa-head">
+    <div><p class="mh-t">Mesa Ejecutiva</p>
+    <p class="mh-s"><b>${abiertos.length}</b> compromiso${abiertos.length===1?'':'s'} abierto${abiertos.length===1?'':'s'}${venc?` · <b style="color:var(--st-urg)">${venc}</b> vencido${venc===1?'':'s'}`:''}${pendTemas?` · <b>${pendTemas}</b> reunión${pendTemas===1?'':'es'} con temas para la próxima`:''}</p></div>
+  </div>`;
+  if(state.mesaTab==='comp') return `${head}<div class="toolbar">${tabs}</div>${mesaCompsView(abiertos)}`;
+  const fs=foros();
+  const chips=`<div class="mesa-chips"><button class="mchip ${!state.mesaFiltro?'on':''}" data-act="mesaFiltro" data-id="">Todas</button>${fs.map(f=>`<button class="mchip ${state.mesaFiltro===f.id?'on':''}" data-act="mesaFiltro" data-id="${esc(f.id)}" style="--mc:${f.col}">${esc(f.label)}</button>`).join("")}</div>`;
+  let list=mesaReuniones();
+  if(state.mesaFiltro) list=list.filter(r=>r.tipo===state.mesaFiltro);
+  list=list.sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1);
+  const nuevo=`<div class="spacer"></div><select class="inp" id="mesaNewTipo" style="width:auto">${fs.map(f=>`<option value="${esc(f.id)}">${esc(f.label)}</option>`).join("")}</select><button class="btn-primary" data-act="mesaNew">＋ Nueva reunión</button>`;
+  const rows=list.map(r=>{
+    const f=foroById(r.tipo); const col=f?f.col:"#888780";
+    const comps=r.compromisos||[]; const ab=comps.filter(compAbierto).length; const vz=comps.filter(compVencido).length;
+    const badge=vz?`<span class="mbadge red">${vz} vencido${vz===1?'':'s'}</span>`:(ab?`<span class="mbadge amber">${ab} abierto${ab===1?'':'s'}</span>`:`<span class="mbadge green">cerrada</span>`);
+    return `<button class="mesa-row" data-act="reuOpen" data-id="${r.id}" style="border-left-color:${col}">
+      <div class="mr-main">
+        <span class="mr-tipo" style="color:${col}">${esc(f?f.label:'—')}</span>
+        <span class="mr-tit">${esc(r.titulo||'(sin título)')}</span>
+      </div>
+      <span class="mr-part">${partList(r).length?esc(partList(r).join(", ")):'<span style="color:var(--tx-faint)">sin participantes</span>'}</span>
+      <span class="mr-date">${r.fecha?fmt(r.fecha):'—'}</span>
+      ${badge}
+    </button>`;
+  }).join("");
+  const body=list.length?`<div class="mesa-list">${rows}</div>`:`<div class="table-wrap"><div class="empty" style="padding:28px">No hay reuniones registradas${state.mesaFiltro?' en este foro':''}. Creá la primera.</div></div>`;
+  return `${head}<div class="toolbar">${tabs}${nuevo}</div>${chips}${body}`;
+}
+function mesaCompsView(abiertos){
+  if(!abiertos.length) return `<div class="table-wrap"><div class="empty" style="padding:28px">No hay compromisos abiertos. Todo cerrado.</div></div>`;
+  const rows=abiertos.map(({r,c,i})=>{
+    const f=foroById(r.tipo); const col=f?f.col:"#888780";
+    const vz=compVencido(c);
+    const due=c.due?`<span class="mbadge ${vz?'red':'gray'}">${fmt(c.due)}</span>`:`<span style="color:var(--tx-faint);font-size:.8em">sin fecha</span>`;
+    return `<tr>
+      <td><span class="mr-tipo" style="color:${col}">${esc(f?f.label:'—')}</span></td>
+      <td><button class="task-title" data-act="reuOpen" data-id="${r.id}">${esc(c.t)}</button></td>
+      <td>${c.resp?esc(c.resp):'<span style="color:var(--tx-faint)">—</span>'}</td>
+      <td>${due}</td>
+      <td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table class="tasks" style="min-width:720px"><thead><tr><th>Foro</th><th>Compromiso</th><th>Responsable</th><th>Vence</th><th>Reunión</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function mesaEditor(r){
+  const fs=foros();
+  const sel=new Set(partList(r));
+  const people=state.responsables||[];
+  const chips=people.length?people.map(p=>`<button class="pchip ${sel.has(p)?'on':''}" data-act="mesaPart" data-p="${esc(p)}">${esc(p)}</button>`).join(""):'<span style="color:var(--tx-faint);font-size:.84em">No hay responsables cargados. Agregalos en Configuración.</span>';
+  const comps=(r.compromisos||[]).map((c,i)=>{
+    const vz=compVencido(c);
+    const mine=c.resp && MY_NAMES.some(n=>c.resp.toLowerCase().includes(n));
+    return `<div class="mcomp ${c.done?'done':''}">
+      <input type="checkbox" ${c.done?'checked':''} data-act="reuCompChk" data-i="${i}">
+      <input class="mc-t" value="${esc(c.t)}" data-act="reuCompTxt" data-i="${i}" placeholder="Compromiso…">
+      <select class="mc-r" data-act="mesaCompResp" data-i="${i}"><option value="">— responsable —</option>${people.map(p=>`<option ${c.resp===p?'selected':''}>${esc(p)}</option>`).join("")}</select>
+      <input class="mc-d ${vz?'over':''}" type="date" value="${esc(c.due||'')}" data-act="mesaCompDue" data-i="${i}" title="Vencimiento">
+      ${mine?`<button class="btn-ghost mc-task" data-act="reuCompTask" data-i="${i}" title="Crear tarea en Seguimiento">${c.taskId?'✓ tarea':'＋ tarea'}</button>`:`<span class="mc-note" title="Solo se crean tareas de tus propios compromisos">—</span>`}
+      <button class="del" data-act="reuCompDel" data-i="${i}" style="opacity:1">🗑</button>
+    </div>`;
+  }).join("");
+  const nD=(r.compromisos||[]).filter(c=>c.done).length, nC=(r.compromisos||[]).length;
+  return `<button class="btn-ghost" data-act="mesaBack" style="margin-bottom:14px">← Volver a Mesa Ejecutiva</button>
+  <div class="scard">
+    <div class="m-grid" style="grid-template-columns:170px 1fr 170px">
+      <div class="m-field"><label>Foro</label><select id="reu_tipo" data-act="reuF" data-f="tipo">${fs.map(f=>`<option value="${esc(f.id)}" ${r.tipo===f.id?'selected':''}>${esc(f.label)}</option>`).join("")}</select></div>
+      <div class="m-field"><label>Título / motivo</label><input id="reu_titulo" value="${esc(r.titulo)}" data-act="reuF" data-f="titulo" placeholder="Ej. Mesa semana 27"></div>
+      <div class="m-field"><label>Fecha</label><input id="reu_fecha" type="date" value="${esc(r.fecha)}" data-act="reuF" data-f="fecha"></div>
+    </div>
+    <div class="m-field" style="margin-top:11px"><label>Participantes</label><div class="pchips">${chips}</div><input type="hidden" id="reu_part" value="${esc(r.participantes)}"></div>
+    <div class="m-field" style="margin-top:11px"><label>Temas tratados</label><textarea id="reu_temas" class="m-detail" data-act="reuF" data-f="temas" placeholder="Orden del día / lo conversado">${esc(r.temas)}</textarea></div>
+    <div class="m-field" style="margin-top:11px"><label>Decisiones</label><textarea id="reu_dec" class="m-detail" data-act="reuF" data-f="decisiones" placeholder="Qué se decidió (una por línea)">${esc(r.decisiones)}</textarea></div>
+
+    <div style="margin-top:14px"><div class="m-block-h"><span>Compromisos</span><span class="sub-prog">${nD}/${nC}</span></div>
+      <div class="mcomps">${comps||'<p style="color:var(--tx-faint);font-size:.84em;margin:0">Sin compromisos. Agregá abajo.</p>'}</div>
+      <div class="sub-add"><input id="reu_newcomp" placeholder="Agregar compromiso y Enter…" data-act="reuCompAdd" data-ev="keydown"></div>
+      <p style="color:var(--tx-faint);font-size:.78em;margin:6px 0 0">Solo los compromisos a tu nombre pueden convertirse en tarea de Seguimiento.</p></div>
+
+    <div class="m-field" style="margin-top:14px"><label>Para la próxima reunión</label><textarea id="reu_pend" class="m-detail" data-act="reuF" data-f="pend" placeholder="Temas que quedaron pendientes">${esc(r.pend||'')}</textarea></div>
+
+    <div style="margin-top:14px"><div class="m-block-h"><span>Referencias (links)</span></div>
+      <div class="subs">${(r.urls||[]).map((u,i)=>`<div class="sub"><span style="font-size:.95em">🔗</span><a class="sx" href="${esc(u.url)}" target="_blank" style="color:var(--accent);text-decoration:underline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.label||u.url)}</a><button class="del" data-act="reuUrlDel" data-i="${i}" style="opacity:1">🗑</button></div>`).join("")||'<p style="color:var(--tx-faint);font-size:.84em;margin:0">Sin links.</p>'}</div>
+      <div class="sub-add"><input id="reu_newurl" placeholder="Pegá una URL y Enter…" data-act="reuUrlAdd" data-ev="keydown"></div></div>
+
+    <div style="margin-top:14px"><div class="m-block-h"><span>Adjuntos (acta, minuta, PDF…)</span></div>
+      <div class="attach-row" style="flex-wrap:wrap">${(r.archivos||[]).map((f,i)=>`<span class="file-pill">📎 <button class="lnk" data-act="reuFileOpen" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-act="reuFileDel" data-i="${i}" style="opacity:1">✕</button></span>`).join("")}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="reu_file" data-act="reuFileUp" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label><span id="reu_busy" style="font-size:.8em;color:var(--tx-faint);display:none">Subiendo…</span></div></div>
+
+    <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
+    <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="mesaBack">Listo</button></div>
+  </div>`;
+}
+const MY_NAMES=["alejandro","alejandro gomez","alejandro gómez"];
+function readMesaForm(r){
+  const g=id=>{const e=$("#"+id);return e?e.value:undefined;};
+  const map={reu_tipo:'tipo',reu_titulo:'titulo',reu_fecha:'fecha',reu_part:'participantes',reu_temas:'temas',reu_dec:'decisiones',reu_pend:'pend',reu_prox:'proxima'};
+  for(const[el,fld] of Object.entries(map)){ const v=g(el); if(v!==undefined)r[fld]=v; }
+}
+function addMesaReunion(){
+  const sel=$("#mesaNewTipo"); const tipo=sel?sel.value:(foros()[0]||{}).id;
+  // arrastra temas pendientes de la última reunión del mismo foro
+  const prev=mesaReuniones().filter(x=>x.tipo===tipo).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1)[0];
+  const temas=prev&&(prev.pend||"").trim()?prev.pend.trim():"";
+  const f=foroById(tipo);
+  const r={id:crypto.randomUUID(),area:"mesa",tipo,fecha:today(),titulo:f?f.label:"",participantes:"",temas,decisiones:"",pend:"",compromisos:[],urls:[],archivos:[],proxima:""};
+  state.reuniones.unshift(r); saveReuNow(r.id); state.reuSel=r.id; render();
+  if(temas)toast("Se cargaron los temas pendientes de la reunión anterior.");
+}
+function mesaTogglePart(name){
+  const r=getReu(state.reuSel); if(!r)return;
+  readMesaForm(r);
+  const cur=partList(r); const i=cur.indexOf(name);
+  if(i>=0)cur.splice(i,1); else cur.push(name);
+  r.participantes=cur.join(", ");
+  scheduleSaveReu(r.id); render();
 }
 
 /* ---------- Repositorio ---------- */
@@ -1218,7 +1368,22 @@ function viewConfig(){
     ${scRows||'<p style="color:var(--tx-faint);font-size:.86em">Sin accesos directos.</p>'}
     <button class="btn-ghost add-row" data-act="scAdd">＋ Agregar acceso directo</button>
     <p style="color:var(--tx-faint);font-size:.8em;margin:10px 0 0">El primer campo es el ícono (podés pegar un emoji). Con el último menú elegís en qué sección aparece (Dashboard, Administración, Calidad, etc.).</p></div>
+  <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Foros de Mesa Ejecutiva</h3>
+    ${foros().map((f,i)=>`<div class="sc-edit"><input class="inp" type="color" style="width:44px;padding:2px" value="${esc(f.col)}" data-act="foroF" data-i="${i}" data-f="col" title="Color"><input class="inp" style="flex:1;min-width:140px" value="${esc(f.label)}" data-act="foroF" data-i="${i}" data-f="label" placeholder="Nombre del foro"><button class="row-del" data-act="foroDel" data-i="${i}">🗑</button></div>`).join("")}
+    <button class="btn-ghost add-row" data-act="foroAdd">＋ Agregar foro</button>
+    <p style="color:var(--tx-faint);font-size:.8em;margin:10px 0 0">Cada foro es un tipo de reunión (1:1 con alguien, mesa de coordinadores, cliente, etc.). Borrar un foro no borra sus reuniones.</p></div>
   <p style="color:var(--tx-faint);font-size:.82em;margin-top:14px">Las áreas y responsables alimentan los menús de tareas y objetivos.</p>`;
+}
+function foroAdd(){
+  const f=foros().slice();
+  f.push({id:"f"+Date.now().toString(36),label:"Nuevo foro",col:"#888780"});
+  state.foros=f; scheduleSaveSettings(); render();
+}
+function foroDel(i){
+  const f=foros().slice(); const gone=f[+i]; if(!gone)return;
+  const used=state.reuniones.filter(r=>r.area==='mesa'&&r.tipo===gone.id).length;
+  if(!confirm(used?`El foro "${gone.label}" tiene ${used} reunión${used===1?'':'es'}. Se conservan, pero quedan sin foro. ¿Borrar?`:`¿Borrar el foro "${gone.label}"?`))return;
+  f.splice(+i,1); state.foros=f; scheduleSaveSettings(); render();
 }
 
 /* ============================================================
@@ -1276,8 +1441,18 @@ const ACTIONS = {
   reuCompTxt:(el)=>{ const r=getReu(state.reuSel); if(!r)return; r.compromisos[+el.dataset.i].t=el.value; scheduleSaveReu(r.id); },
   reuCompChk:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos[+el.dataset.i].done=el.checked; scheduleSaveReu(r.id); render(); },
   reuCompDel:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
-  reuCompAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.push({t:v,done:false,taskId:null}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newcomp"); if(n)n.focus();},10); },
+  reuCompAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.push({t:v,done:false,taskId:null,resp:'',due:''}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newcomp"); if(n)n.focus();},10); },
   reuCompTask:(el)=>taskFromCompromiso(+el.dataset.i),
+  mesaTab:(el)=>{ state.mesaTab=el.dataset.id; render(); },
+  mesaFiltro:(el)=>{ state.mesaFiltro=el.dataset.id||""; render(); },
+  mesaNew:()=>addMesaReunion(),
+  mesaBack:()=>{ state.reuSel=null; render(); },
+  mesaPart:(el)=>mesaTogglePart(el.dataset.p),
+  mesaCompResp:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos[+el.dataset.i].resp=el.value; scheduleSaveReu(r.id); render(); },
+  mesaCompDue:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos[+el.dataset.i].due=el.value; scheduleSaveReu(r.id); render(); },
+  foroAdd:()=>foroAdd(),
+  foroDel:(el)=>foroDel(el.dataset.i),
+  foroF:(el)=>{ const i=+el.dataset.i; const f=foros().slice(); f[i]={...f[i],[el.dataset.f]:el.value}; state.foros=f; scheduleSaveSettings(); if(el.dataset.f==='col')render(); },
   reuUrlAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.urls=r.urls||[]; r.urls.push({label:v,url:v}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newurl"); if(n)n.focus();},10); },
   reuUrlDel:(el)=>{ const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.urls.splice(+el.dataset.i,1); scheduleSaveReu(r.id); render(); },
   reuFileOpen:(el)=>{ const r=getReu(state.reuSel); if(!r)return; const f=r.archivos[+el.dataset.i]; if(f&&f.path)openFile(f.path); },
