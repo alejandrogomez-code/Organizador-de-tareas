@@ -25,11 +25,12 @@ const MONTHS = monthRange();
 const monthLabel = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1])+" "+y; };
 const shortM = ym => { const[y,m]=ym.split("-"); return Cap(MONTHS_ES[+m-1]).slice(0,3)+" '"+y.slice(2); };
 
-const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"mesa",label:"Mesa Ejecutiva",ic:"⚑"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
+const SECTIONS = [{id:"dashboard",label:"Dashboard",ic:"▦"},{id:"objetivos",label:"Objetivos",ic:"◎"},{id:"tareas",label:"Seguimiento de Tareas",ic:"☑"},{id:"mesa",label:"Mesa Ejecutiva",ic:"⚑"},{id:"calendario",label:"Calendario",ic:"◷"},{id:"admin",label:"Administración · Finanzas",ic:"$"},{id:"calidad",label:"Calidad",ic:"✦"},{id:"logistica",label:"Logística · Compras",ic:"⛟"},{id:"sistemas",label:"Sistemas",ic:"⚙"},{id:"leex",label:"LEEX",ic:"◈"}];
 const CARD_STYLE = {
   objetivos:{bg:"#eef1ff",fg:"#4453c4",solid:"#534AB7",tint:"#CECBF6",bar:"#7F77DD"},
   tareas:   {bg:"#e8f6ee",fg:"#15803d",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
   mesa:     {bg:"#fbeaf0",fg:"#993556",solid:"#993556",tint:"#F4C0D1",bar:"#D4537E"},
+  calendario:{bg:"#e6f1fb",fg:"#0C447C",solid:"#185FA5",tint:"#B5D4F4",bar:"#378ADD"},
   admin:    {bg:"#fdf3e2",fg:"#b4760a",solid:"#185FA5",tint:"#B5D4F4",bar:"#378ADD"},
   calidad:  {bg:"#f3eefe",fg:"#7b4fd0",solid:"#0F6E56",tint:"#9FE1CB",bar:"#1D9E75"},
   logistica:{bg:"#e6f3fb",fg:"#1f7bb6",solid:"#BA7517",tint:"#FAC775",bar:"#BA7517"},
@@ -88,6 +89,7 @@ const state = {
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
   blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
+  calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
@@ -135,7 +137,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -175,7 +177,7 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -215,6 +217,7 @@ function render(){
   else if(state.view==="objetivos") c.innerHTML=state.objSel?objDetail(getObjById(state.objSel)):objList();
   else if(state.view==="config") c.innerHTML=viewConfig();
   else if(state.view==="mesa") c.innerHTML=viewMesa();
+  else if(state.view==="calendario"){ c.innerHTML=viewCalendario(); if(state.calUrls.length&&!state.calEditing)paintCalendar(); }
   else if(OPS_ENABLED.includes(state.view)) c.innerHTML=sectionView(state.view);
   else c.innerHTML=viewPlaceholder(sec);
   bindContent();
@@ -261,6 +264,8 @@ function viewDashboard(){
     } else if(s.id==="objetivos"){
       const os=state.objetivos; const avg=os.length?Math.round(os.reduce((a,o)=>a+objAvance(o),0)/os.length):0;
       sub=`${os.length} en seguimiento`; pct=avg;
+    } else if(s.id==="calendario"){
+      sub=state.calUrls.length?`${state.calUrls.length} calendario${state.calUrls.length===1?'':'s'} conectado${state.calUrls.length===1?'':'s'}`:"Sin conectar"; pct=null;
     } else if(s.id==="mesa"){
       const ab=mesaOpenComps(); const vz=ab.filter(x=>compVencido(x.c)).length;
       const total=mesaReuniones().reduce((n,r)=>n+(r.compromisos||[]).length,0);
@@ -1114,6 +1119,201 @@ function reunionEditor(secId,r){
   </div>`;
 }
 
+/* ---------- Calendario (Google ICS, solo lectura vía proxy) ---------- */
+const ICS_PROXY = SUPABASE_URL + "/functions/v1/ics-proxy";
+function calToday(){ return new Date(today()+"T00:00"); }
+function calCursorDate(){ return state.calCursor?new Date(state.calCursor+"T00:00"):calToday(); }
+function ymd(d){ return d.toISOString().slice(0,10); }
+function unfold(text){ return text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\n[ \t]/g,""); }
+function icsUnescape(v){ return (v||"").replace(/\\n/gi,"\n").replace(/\\,/g,",").replace(/\\;/g,";").replace(/\\\\/g,"\\"); }
+function parseIcsDate(val,params){
+  // val: 20260708 o 20260708T140000Z o 20260708T140000
+  const allDay=/^\d{8}$/.test(val);
+  if(allDay){ const y=+val.slice(0,4),m=+val.slice(4,6)-1,d=+val.slice(6,8); return {date:new Date(y,m,d),allDay:true}; }
+  const mt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if(!mt)return null;
+  const [_,Y,Mo,D,H,Mi,S,Z]=mt;
+  if(Z){ return {date:new Date(Date.UTC(+Y,+Mo-1,+D,+H,+Mi,+S)),allDay:false}; }
+  return {date:new Date(+Y,+Mo-1,+D,+H,+Mi,+S),allDay:false}; // hora local (aprox, sin TZID estricto)
+}
+function parseIcs(text,calIdx){
+  const out=[]; const lines=unfold(text).split("\n");
+  let cur=null;
+  for(const ln of lines){
+    if(ln==="BEGIN:VEVENT"){ cur={}; continue; }
+    if(ln==="END:VEVENT"){ if(cur&&cur.start){ out.push(finishEvent(cur,calIdx)); } cur=null; continue; }
+    if(!cur)continue;
+    const ci=ln.indexOf(":"); if(ci<0)continue;
+    let key=ln.slice(0,ci), val=ln.slice(ci+1);
+    const semi=key.indexOf(";"); let params={};
+    if(semi>=0){ key.slice(semi+1).split(";").forEach(kv=>{ const [k,v]=kv.split("="); params[k]=v; }); key=key.slice(0,semi); }
+    key=key.toUpperCase();
+    if(key==="SUMMARY")cur.summary=icsUnescape(val);
+    else if(key==="LOCATION")cur.location=icsUnescape(val);
+    else if(key==="DTSTART")cur.start=parseIcsDate(val,params);
+    else if(key==="DTEND")cur.end=parseIcsDate(val,params);
+    else if(key==="RRULE")cur.rrule=val;
+  }
+  return out;
+}
+function finishEvent(cur,calIdx){
+  return { title:cur.summary||"(sin título)", loc:cur.location||"", start:cur.start.date, end:cur.end?cur.end.date:cur.start.date, allDay:cur.start.allDay, rrule:cur.rrule||"", cal:calIdx };
+}
+// Expande recurrencias simples (DAILY/WEEKLY/MONTHLY, sin excepciones) dentro del rango visible.
+function expandRecurring(ev,rangeStart,rangeEnd){
+  if(!ev.rrule) return withinRange(ev,rangeStart,rangeEnd)?[ev]:[];
+  const p={}; ev.rrule.split(";").forEach(kv=>{ const[k,v]=kv.split("="); p[k]=v; });
+  const freq=p.FREQ; if(!["DAILY","WEEKLY","MONTHLY"].includes(freq)) return withinRange(ev,rangeStart,rangeEnd)?[ev]:[];
+  const interval=Math.max(1,+(p.INTERVAL||1));
+  const until=p.UNTIL?parseIcsDate(p.UNTIL.replace(/Z$/,"Z"),{})?.date:null;
+  const count=p.COUNT?+p.COUNT:null;
+  const dur=ev.end-ev.start;
+  const out=[]; let d=new Date(ev.start); let n=0; let guard=0;
+  while(guard++<800){
+    if(d>rangeEnd)break;
+    if(until&&d>until)break;
+    if(count&&n>=count)break;
+    if(d>=rangeStart && d<=rangeEnd){ out.push({...ev,start:new Date(d),end:new Date(d.getTime()+dur),rrule:""}); }
+    n++;
+    if(freq==="DAILY")d.setDate(d.getDate()+interval);
+    else if(freq==="WEEKLY")d.setDate(d.getDate()+7*interval);
+    else d.setMonth(d.getMonth()+interval);
+  }
+  return out;
+}
+function withinRange(ev,a,b){ return ev.end>=a && ev.start<=b; }
+async function loadCalendar(force){
+  if(!state.calUrls.length){ state.calEvents=[]; state.calLoaded=true; return; }
+  if(state.calLoading)return;
+  state.calLoading=true; state.calError=""; if(state.view==='calendario')paintCalendar();
+  const all=[];
+  try{
+    for(let i=0;i<state.calUrls.length;i++){
+      const u=state.calUrls[i]; if(!u.trim())continue;
+      const res=await fetch(ICS_PROXY,{ method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_ANON_KEY, "apikey":SUPABASE_ANON_KEY }, body:JSON.stringify({url:u.trim()}) });
+      if(!res.ok){ let msg="Error "+res.status; try{ const j=await res.json(); if(j.error)msg=j.error; }catch{} throw new Error(msg); }
+      const txt=await res.text();
+      all.push(...parseIcs(txt,i));
+    }
+    state.calEvents=all; state.calLoaded=true;
+  }catch(e){
+    state.calError=String(e.message||e);
+  }finally{
+    state.calLoading=false; if(state.view==='calendario')paintCalendar();
+  }
+}
+const CAL_COLORS=["#185FA5","#0F6E56","#993556","#BA7517","#534AB7"];
+function calColor(i){ return CAL_COLORS[i%CAL_COLORS.length]; }
+function eventsForRange(a,b){
+  const out=[]; state.calEvents.forEach(ev=>out.push(...expandRecurring(ev,a,b)));
+  return out.sort((x,y)=>x.start-y.start);
+}
+function hhmm(d){ return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function viewCalendario(){
+  if(!state.calUrls.length || state.calEditing) return calConnectHTML();
+  if(!state.calLoaded && !state.calLoading){ setTimeout(()=>loadCalendar(),0); }
+  const seg=`<div class="seg">${[["mes","Mes"],["semana","Semana"],["agenda","Agenda"]].map(v=>`<button class="${state.calView===v[0]?'on':''}" data-act="calView" data-id="${v[0]}">${v[1]}</button>`).join("")}</div>`;
+  const nav=`<button class="btn-ghost" data-act="calNav" data-id="prev">‹</button><button class="btn-ghost" data-act="calNav" data-id="today">Hoy</button><button class="btn-ghost" data-act="calNav" data-id="next">›</button>`;
+  const toolbar=`<div class="toolbar">${seg}<div class="spacer"></div><span id="calTitle" style="font-size:1.02em;font-weight:600;text-transform:capitalize;margin-right:6px"></span>${nav}<button class="btn-ghost" data-act="calRefresh" title="Actualizar desde Google">⟳</button><button class="btn-ghost" data-act="calSettings" title="Calendarios conectados">⚙</button></div>`;
+  return `${toolbar}<div id="calArea"></div>`;
+}
+function calConnectHTML(){
+  return `<div class="scard" style="max-width:560px;margin:20px auto">
+    <h3 style="font-size:1em;color:var(--tx);text-transform:none;letter-spacing:0;margin:0 0 6px">Conectar Google Calendar</h3>
+    <p style="font-size:.86em;color:var(--tx-dim);margin:0 0 14px">Pegá la <b>dirección secreta en formato iCal</b> de tu calendario de Google (una por línea si tenés varios). La encontrás en Google Calendar → Configuración del calendario → Integrar calendario → “Dirección secreta en formato iCal”.</p>
+    <textarea id="calUrlInput" class="m-detail" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" style="min-height:90px">${esc(state.calUrls.join("\n"))}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      ${state.calUrls.length?`<button class="btn-ghost" data-act="calCancelEdit">Cancelar</button>`:''}
+      <button class="btn-primary" data-act="calSave">Guardar y conectar</button>
+    </div>
+    <p style="font-size:.78em;color:var(--tx-faint);margin:14px 0 0">La URL es privada y se guarda solo en tu configuración. Requiere haber desplegado la función <code>ics-proxy</code> en Supabase (ver la guía CALENDARIO-google.md).</p>
+  </div>`;
+}
+function paintCalendar(){
+  const area=$("#calArea"); if(!area)return;
+  const tEl=$("#calTitle");
+  if(state.calLoading||(!state.calLoaded&&!state.calError)){ area.innerHTML=`<div class="table-wrap"><div class="empty" style="padding:30px">Cargando eventos de Google…</div></div>`; return; }
+  if(state.calError){ area.innerHTML=`<div class="table-wrap"><div class="empty" style="padding:24px"><p style="color:var(--st-urg);margin:0 0 6px">No se pudieron traer los eventos.</p><p style="font-size:.86em;color:var(--tx-dim);margin:0 0 12px">${esc(state.calError)}</p><button class="btn-ghost" data-act="calRefresh">Reintentar</button> <button class="btn-ghost" data-act="calSettings">Revisar conexión</button></div></div>`; bindContentArea(area); return; }
+  if(state.calView==="mes"){ if(tEl)tEl.textContent=monthTitle(calCursorDate()); area.innerHTML=calMonthHTML(); }
+  else if(state.calView==="semana"){ if(tEl)tEl.textContent=weekTitle(calCursorDate()); area.innerHTML=calWeekHTML(); }
+  else { if(tEl)tEl.textContent=""; area.innerHTML=calAgendaHTML(); }
+  bindContentArea(area);
+}
+function bindContentArea(area){ area.querySelectorAll("[data-act]").forEach(el=>{ const h=ACTIONS[el.dataset.act]; if(!h)return; const ev=el.dataset.ev||(el.tagName==="SELECT"||el.tagName==="INPUT"||el.tagName==="TEXTAREA"?"change":"click"); el["on"+ev]=e=>h(el,e); }); }
+const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const DIAS=["lun","mar","mié","jue","vie","sáb","dom"];
+function monthTitle(d){ return MESES[d.getMonth()]+" "+d.getFullYear(); }
+function weekTitle(d){ const s=weekStart(d); const e=new Date(s); e.setDate(e.getDate()+6); return `${s.getDate()} ${MESES[s.getMonth()].slice(0,3)} – ${e.getDate()} ${MESES[e.getMonth()].slice(0,3)}`; }
+function weekStart(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); x.setHours(0,0,0,0); return x; }
+function evChip(ev){
+  const col=calColor(ev.cal);
+  const t=ev.allDay?"":hhmm(ev.start)+" ";
+  return `<div class="cal-ev" style="--ec:${col}" title="${esc((t?t:'')+ev.title)}"><span class="cal-ev-dot"></span><span class="cal-ev-t">${esc(t)}${esc(ev.title)}</span></div>`;
+}
+function calMonthHTML(){
+  const cur=calCursorDate();
+  const first=new Date(cur.getFullYear(),cur.getMonth(),1);
+  const gridStart=weekStart(first);
+  const gridEnd=new Date(gridStart); gridEnd.setDate(gridEnd.getDate()+41); gridEnd.setHours(23,59,59);
+  const evs=eventsForRange(gridStart,gridEnd);
+  const byDay={};
+  evs.forEach(ev=>{ const k=ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate())); (byDay[k]=byDay[k]||[]).push(ev); });
+  const t0=ymd(calToday());
+  let cells="";
+  for(let i=0;i<42;i++){
+    const d=new Date(gridStart); d.setDate(d.getDate()+i);
+    const k=ymd(d); const inMonth=d.getMonth()===cur.getMonth(); const isToday=k===t0;
+    const dayEvs=(byDay[k]||[]);
+    const shown=dayEvs.slice(0,3).map(evChip).join("");
+    const more=dayEvs.length>3?`<div class="cal-more">+${dayEvs.length-3} más</div>`:"";
+    cells+=`<div class="cal-cell${inMonth?'':' out'}${isToday?' today':''}"><div class="cal-daynum">${d.getDate()}</div>${shown}${more}</div>`;
+  }
+  const heads=DIAS.map(x=>`<div class="cal-dh">${x}</div>`).join("");
+  return `<div class="cal-month"><div class="cal-heads">${heads}</div><div class="cal-grid">${cells}</div></div>${calLegend()}`;
+}
+function calWeekHTML(){
+  const s=weekStart(calCursorDate());
+  const e=new Date(s); e.setDate(e.getDate()+7);
+  const evs=eventsForRange(s,e);
+  const t0=ymd(calToday());
+  let cols="";
+  for(let i=0;i<7;i++){
+    const d=new Date(s); d.setDate(d.getDate()+i); const k=ymd(d);
+    const dayEvs=evs.filter(ev=>ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate()))===k);
+    const items=dayEvs.length?dayEvs.map(evChip).join(""):`<div class="cal-empty-day">—</div>`;
+    cols+=`<div class="cal-wcol${k===t0?' today':''}"><div class="cal-wh">${DIAS[i]} ${d.getDate()}</div><div class="cal-wbody">${items}</div></div>`;
+  }
+  return `<div class="cal-week">${cols}</div>${calLegend()}`;
+}
+function calAgendaHTML(){
+  const s=calToday(); const e=new Date(s); e.setDate(e.getDate()+30);
+  const evs=eventsForRange(s,e);
+  if(!evs.length) return `<div class="table-wrap"><div class="empty" style="padding:28px">No hay eventos en los próximos 30 días.</div></div>`;
+  const byDay={};
+  evs.forEach(ev=>{ const k=ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate())); (byDay[k]=byDay[k]||[]).push(ev); });
+  const rows=Object.keys(byDay).sort().map(k=>{
+    const d=new Date(k+"T00:00");
+    const items=byDay[k].map(ev=>`<div class="cal-ag-ev"><span class="cal-ag-time">${ev.allDay?'todo el día':hhmm(ev.start)}</span><span class="cal-ev-dot" style="--ec:${calColor(ev.cal)}"></span><span class="cal-ag-t">${esc(ev.title)}</span>${ev.loc?`<span class="cal-ag-loc">${esc(ev.loc)}</span>`:''}</div>`).join("");
+    return `<div class="cal-ag-day"><div class="cal-ag-date">${DIAS[(d.getDay()+6)%7]} ${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}</div><div class="cal-ag-list">${items}</div></div>`;
+  }).join("");
+  return `<div class="cal-agenda">${rows}</div>${calLegend()}`;
+}
+function calLegend(){
+  if(state.calUrls.length<2)return "";
+  return `<div class="cal-legend">${state.calUrls.map((u,i)=>`<span><span class="cal-ev-dot" style="--ec:${calColor(i)}"></span> Calendario ${i+1}</span>`).join("")}</div>`;
+}
+function calShift(dir){
+  const d=calCursorDate();
+  if(dir==="today"){ state.calCursor=null; }
+  else{ const s=dir==="next"?1:-1;
+    if(state.calView==="mes")d.setMonth(d.getMonth()+s);
+    else if(state.calView==="semana")d.setDate(d.getDate()+7*s);
+    else d.setDate(d.getDate()+30*s);
+    state.calCursor=ymd(d);
+  }
+  paintCalendar();
+}
+
 /* ---------- Mesa Ejecutiva ---------- */
 function mesaReuniones(){ return state.reuniones.filter(r=>r.area==='mesa'); }
 function compAbierto(c){ return !c.done && (c.t||"").trim(); }
@@ -1444,6 +1644,12 @@ const ACTIONS = {
   reuCompAdd:(el,e)=>{ if(e.key!=='Enter')return; const v=el.value.trim(); if(!v)return; const r=getReu(state.reuSel); if(!r)return; readReuForm(r); r.compromisos.push({t:v,done:false,taskId:null,resp:'',due:''}); saveReuNow(r.id); render(); setTimeout(()=>{const n=$("#reu_newcomp"); if(n)n.focus();},10); },
   reuCompTask:(el)=>taskFromCompromiso(+el.dataset.i),
   mesaTab:(el)=>{ state.mesaTab=el.dataset.id; render(); },
+  calView:(el)=>{ state.calView=el.dataset.id; paintCalendar(); },
+  calNav:(el)=>calShift(el.dataset.id),
+  calRefresh:()=>{ state.calLoaded=false; loadCalendar(true); },
+  calCancelEdit:()=>{ state.calEditing=false; render(); },
+  calSettings:()=>{ state.calEditing=true; render(); },
+  calSave:()=>{ const el=$("#calUrlInput"); if(!el)return; state.calUrls=el.value.split("\n").map(s=>s.trim()).filter(Boolean); state.calEditing=false; state.calLoaded=false; state.calError=""; scheduleSaveSettings(); render(); if(state.calUrls.length)loadCalendar(true); },
   mesaFiltro:(el)=>{ state.mesaFiltro=el.dataset.id||""; render(); },
   mesaNew:()=>addMesaReunion(),
   mesaBack:()=>{ state.reuSel=null; render(); },
