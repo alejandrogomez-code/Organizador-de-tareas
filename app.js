@@ -90,6 +90,7 @@ const state = {
   blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
+  eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
 };
@@ -127,6 +128,8 @@ function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titul
 function deDoc(r){ return {id:r.id,area:r.area||"",titulo:r.titulo||"",categoria:r.categoria||"",url:r.url||"",files:r.files||[],nota:r.nota||"",fecha:r.fecha||""}; }
 function serBloque(b){ return {id:b.id,user_id:UID,fecha:b.fecha||null,nombre:b.nombre||"",inicio:b.inicio||null,fin:b.fin||null,orden:b.orden||0,tareas:b.tareas||[]}; }
 function deBloque(r){ return {id:r.id,fecha:r.fecha||"",nombre:r.nombre||"",inicio:r.inicio||"",fin:r.fin||"",orden:r.orden||0,tareas:r.tareas||[]}; }
+function serEvento(e){ return {id:e.id,user_id:UID,fecha:e.fecha||null,fin_fecha:e.finFecha||null,inicio:e.inicio||null,fin:e.fin||null,titulo:e.titulo||"",nota:e.nota||null,color:e.color||null}; }
+function deEvento(r){ return {id:r.id,fecha:r.fecha||"",finFecha:r.fin_fecha||"",inicio:r.inicio||"",fin:r.fin||"",titulo:r.titulo||"",nota:r.nota||"",color:r.color||""}; }
 
 const timers = {};
 function db(){ return sb && UID; }
@@ -137,7 +140,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -154,6 +157,10 @@ function getBloque(id){ return state.bloques.find(b=>b.id===id); }
 function scheduleSaveBloque(id){ if(!db())return; clearTimeout(timers["b"+id]); timers["b"+id]=setTimeout(()=>saveBloqueNow(id),500); }
 async function saveBloqueNow(id){ if(!db())return; const b=getBloque(id); if(!b)return; const {error}=await sb.from("bloques_dia").upsert(serBloque(b)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteBloqueDb(id){ if(!db())return; const {error}=await sb.from("bloques_dia").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+function getEvento(id){ return state.eventos.find(e=>e.id===id); }
+function scheduleSaveEvento(id){ if(!db())return; clearTimeout(timers["e"+id]); timers["e"+id]=setTimeout(()=>saveEventoNow(id),500); }
+async function saveEventoNow(id){ if(!db())return; const e=getEvento(id); if(!e)return; const {error}=await sb.from("eventos_cal").upsert(serEvento(e)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteEventoDb(id){ if(!db())return; const {error}=await sb.from("eventos_cal").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 
 /* ---------- Storage (bucket "archivos") ---------- */
 async function uploadFile(file){
@@ -177,7 +184,7 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -191,6 +198,7 @@ async function loadAll(){
   { const {data,error}=await sb.from("documentos").select("*").eq("user_id",UID).order("inserted_at",{ascending:false}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración v3 (Repositorio) en Supabase."); state.documentos=(data||[]).map(deDoc); }
   // bloques del día
   { const {data,error}=await sb.from("bloques_dia").select("*").eq("user_id",UID).order("orden",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Bloques del día en Supabase."); state.bloques=(data||[]).map(deBloque); }
+  { const {data,error}=await sb.from("eventos_cal").select("*").eq("user_id",UID); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración del Calendario (eventos_cal) en Supabase."); state.eventos=(data||[]).map(deEvento); }
   state.seq = state.tasks.reduce((m,t)=>Math.max(m,t.n||0),0)+1;
 }
 
@@ -217,7 +225,7 @@ function render(){
   else if(state.view==="objetivos") c.innerHTML=state.objSel?objDetail(getObjById(state.objSel)):objList();
   else if(state.view==="config") c.innerHTML=viewConfig();
   else if(state.view==="mesa") c.innerHTML=viewMesa();
-  else if(state.view==="calendario"){ c.innerHTML=viewCalendario(); if(state.calUrls.length&&!state.calEditing)paintCalendar(); }
+  else if(state.view==="calendario"){ c.innerHTML=viewCalendario(); if(!state.calEditing)paintCalendar(); }
   else if(OPS_ENABLED.includes(state.view)) c.innerHTML=sectionView(state.view);
   else c.innerHTML=viewPlaceholder(sec);
   bindContent();
@@ -265,7 +273,8 @@ function viewDashboard(){
       const os=state.objetivos; const avg=os.length?Math.round(os.reduce((a,o)=>a+objAvance(o),0)/os.length):0;
       sub=`${os.length} en seguimiento`; pct=avg;
     } else if(s.id==="calendario"){
-      sub=state.calUrls.length?`${state.calUrls.length} calendario${state.calUrls.length===1?'':'s'} conectado${state.calUrls.length===1?'':'s'}`:"Sin conectar"; pct=null;
+      const nEv=state.eventos.length; const g=state.calUrls.length;
+      sub=nEv?`${nEv} evento${nEv===1?'':'s'} propio${nEv===1?'':'s'}${g?' · Google conectado':''}`:(g?"Google conectado":"Vista unificada"); pct=null;
     } else if(s.id==="mesa"){
       const ab=mesaOpenComps(); const vz=ab.filter(x=>compVencido(x.c)).length;
       const total=mesaReuniones().reduce((n,r)=>n+(r.compromisos||[]).length,0);
@@ -1236,39 +1245,68 @@ async function loadCalendar(force){
 }
 const CAL_COLORS=["#185FA5","#0F6E56","#993556","#BA7517","#534AB7"];
 function calColor(i){ return CAL_COLORS[i%CAL_COLORS.length]; }
-function eventsForRange(a,b){
-  const out=[]; state.calEvents.forEach(ev=>out.push(...expandRecurring(ev,a,b)));
-  return out.sort((x,y)=>x.start-y.start);
-}
 function hhmm(d){ return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+const LAYERS=[
+  {key:"bloques",     label:"Bloques del día", color:"#534AB7"},
+  {key:"reuniones",   label:"Reuniones",       color:"#993556"},
+  {key:"vencimientos",label:"Vencimientos",    color:"#BA7517"},
+  {key:"tareas",      label:"Tareas c/fecha",  color:"#1D9E75"},
+  {key:"eventos",     label:"Eventos propios", color:"#0C447C"},
+  {key:"google",      label:"Google Calendar", color:"#185FA5"},
+];
+function layerMeta(k){ return LAYERS.find(l=>l.key===k)||{color:"#888",label:k}; }
+function dOnly(dstr){ return new Date(dstr+"T00:00"); }
+// Reúne todas las capas activas en un rango, como items normalizados.
+function calItems(a,b){
+  const L=state.calLayers; const out=[];
+  const push=(dstr,o)=>{ if(!dstr)return; const d=dOnly(dstr); if(d<a||d>b)return; out.push({date:d,key:dstr,allDay:!o.time,...o}); };
+  if(L.bloques) state.bloques.forEach(bl=>{ if(bl.fecha){ const n=(bl.tareas||[]).length; push(bl.fecha,{layer:"bloques",color:"#534AB7",time:bl.inicio||"",title:(bl.nombre||"Bloque")+(n?` · ${n} tarea${n===1?'':'s'}`:""),ref:{t:"bloque",id:bl.id}}); } });
+  if(L.reuniones) state.reuniones.forEach(r=>{ if(r.fecha)push(r.fecha,{layer:"reuniones",color:"#993556",time:"",title:r.titulo||"Reunión",ref:{t:"reu",id:r.id,area:r.area}}); if(r.proxima)push(r.proxima,{layer:"reuniones",color:"#C4708D",time:"",title:"Próx: "+(r.titulo||"Reunión"),ref:{t:"reu",id:r.id,area:r.area}}); });
+  if(L.vencimientos) state.vencimientos.forEach(v=>{ if(v.due&&v.status!=='ok')push(v.due,{layer:"vencimientos",color:"#BA7517",time:"",title:"Vence: "+(v.concepto||"—"),ref:{t:"venc",id:v.id,area:v.area}}); });
+  if(L.tareas) state.tasks.forEach(t=>{ if(t.due&&!["comp","desc"].includes(t.status))push(t.due,{layer:"tareas",color:"#1D9E75",time:"",title:t.title||"Tarea",ref:{t:"task",id:t.id}}); });
+  if(L.eventos) state.eventos.forEach(e=>{ if(e.fecha)push(e.fecha,{layer:"eventos",color:e.color||"#0C447C",time:e.inicio||"",title:e.titulo||"Evento",ref:{t:"evt",id:e.id}}); });
+  if(L.google) state.calEvents.forEach(ev=>{ expandRecurring(ev,a,b).forEach(x=>{ out.push({date:new Date(x.start.getFullYear(),x.start.getMonth(),x.start.getDate()),key:ymd(x.start),allDay:x.allDay,layer:"google",color:"#185FA5",time:x.allDay?"":hhmm(x.start),title:x.title,loc:x.loc||"",ref:{t:"google"}}); }); });
+  return out.sort((x,y)=>{ if(x.date-y.date)return x.date-y.date; const xt=x.time||"99:99", yt=y.time||"99:99"; return xt<yt?-1:(xt>yt?1:0); });
+}
+function itemsByDay(a,b){ const m={}; calItems(a,b).forEach(it=>{ (m[ymd(it.date)]=m[ymd(it.date)]||[]).push(it); }); return m; }
 function viewCalendario(){
-  if(!state.calUrls.length || state.calEditing) return calConnectHTML();
-  if(!state.calLoaded && !state.calLoading){ setTimeout(()=>loadCalendar(),0); }
+  if(state.calEditing) return calConnectHTML();
+  if(state.calLayers.google && state.calUrls.length && !state.calLoaded && !state.calLoading){ setTimeout(()=>loadCalendar(),0); }
   const seg=`<div class="seg">${[["mes","Mes"],["semana","Semana"],["agenda","Agenda"]].map(v=>`<button class="${state.calView===v[0]?'on':''}" data-act="calView" data-id="${v[0]}">${v[1]}</button>`).join("")}</div>`;
   const nav=`<button class="btn-ghost" data-act="calNav" data-id="prev">‹</button><button class="btn-ghost" data-act="calNav" data-id="today">Hoy</button><button class="btn-ghost" data-act="calNav" data-id="next">›</button>`;
-  const toolbar=`<div class="toolbar">${seg}<div class="spacer"></div><span id="calTitle" style="font-size:1.02em;font-weight:600;text-transform:capitalize;margin-right:6px"></span>${nav}<button class="btn-ghost" data-act="calRefresh" title="Actualizar desde Google">⟳</button><button class="btn-ghost" data-act="calSettings" title="Calendarios conectados">⚙</button></div>`;
-  return `${toolbar}<div id="calArea"></div>`;
+  const toolbar=`<div class="toolbar">${seg}<div class="spacer"></div><span id="calTitle" style="font-size:1.02em;font-weight:600;text-transform:capitalize;margin-right:6px"></span>${nav}<button class="btn-primary" data-act="evtNew">＋ Evento</button>${state.calLayers.google?`<button class="btn-ghost" data-act="calRefresh" title="Actualizar desde Google">⟳</button>`:''}<button class="btn-ghost" data-act="calSettings" title="Conectar Google">⚙</button></div>`;
+  return `${toolbar}${calLayerBar()}<div id="calArea"></div>`;
+}
+function calLayerBar(){
+  return `<div class="cal-layers">${LAYERS.map(l=>{
+    const on=state.calLayers[l.key]!==false;
+    const isG=l.key==="google";
+    const lab=isG&&!state.calUrls.length?l.label+" (sin conectar)":l.label;
+    return `<button class="cal-lchip ${on?'on':''}" data-act="calLayer" data-id="${l.key}" style="--lc:${l.color}"><span class="cal-ldot"></span>${esc(lab)}</button>`;
+  }).join("")}</div>`;
 }
 function calConnectHTML(){
   return `<div class="scard" style="max-width:560px;margin:20px auto">
+    ${state.calUrls.length?'<button class="btn-ghost" data-act="calCancelEdit" style="margin-bottom:12px">← Volver al calendario</button>':''}
     <h3 style="font-size:1em;color:var(--tx);text-transform:none;letter-spacing:0;margin:0 0 6px">Conectar Google Calendar</h3>
-    <p style="font-size:.86em;color:var(--tx-dim);margin:0 0 14px">Pegá la <b>dirección secreta en formato iCal</b> de tu calendario de Google (una por línea si tenés varios). La encontrás en Google Calendar → Configuración del calendario → Integrar calendario → “Dirección secreta en formato iCal”.</p>
+    <p style="font-size:.86em;color:var(--tx-dim);margin:0 0 14px">Pegá la <b>dirección secreta en formato iCal</b> de tu calendario de Google (una por línea si tenés varios). La encontrás en Google Calendar → Configuración del calendario → Integrar calendario → “Dirección secreta en formato iCal”. Es opcional: el calendario funciona igual con tus datos internos.</p>
     <textarea id="calUrlInput" class="m-detail" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" style="min-height:90px">${esc(state.calUrls.join("\n"))}</textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
       ${state.calUrls.length?`<button class="btn-ghost" data-act="calCancelEdit">Cancelar</button>`:''}
       <button class="btn-primary" data-act="calSave">Guardar y conectar</button>
     </div>
-    <p style="font-size:.78em;color:var(--tx-faint);margin:14px 0 0">La URL es privada y se guarda solo en tu configuración. Requiere haber desplegado la función <code>ics-proxy</code> en Supabase (ver la guía CALENDARIO-google.md).</p>
   </div>`;
 }
 function paintCalendar(){
   const area=$("#calArea"); if(!area)return;
   const tEl=$("#calTitle");
-  if(state.calLoading||(!state.calLoaded&&!state.calError)){ area.innerHTML=`<div class="table-wrap"><div class="empty" style="padding:30px">Cargando eventos de Google…</div></div>`; return; }
-  if(state.calError){ area.innerHTML=`<div class="table-wrap"><div class="empty" style="padding:24px"><p style="color:var(--st-urg);margin:0 0 6px">No se pudieron traer los eventos.</p><p style="font-size:.86em;color:var(--tx-dim);margin:0 0 12px">${esc(state.calError)}</p><button class="btn-ghost" data-act="calRefresh">Reintentar</button> <button class="btn-ghost" data-act="calSettings">Revisar conexión</button></div></div>`; bindContentArea(area); return; }
-  if(state.calView==="mes"){ if(tEl)tEl.textContent=monthTitle(calCursorDate()); area.innerHTML=calMonthHTML(); }
-  else if(state.calView==="semana"){ if(tEl)tEl.textContent=weekTitle(calCursorDate()); area.innerHTML=calWeekHTML(); }
-  else { if(tEl)tEl.textContent=""; area.innerHTML=calAgendaHTML(); }
+  if(state.calLayers.google && state.calLoading){ area.innerHTML=`<div class="table-wrap"><div class="empty" style="padding:30px">Cargando eventos de Google…</div></div>`; return; }
+  if(state.calLayers.google && state.calError){ area.innerHTML=`<div class="cal-err">No se pudieron traer los eventos de Google: ${esc(state.calError)} <button class="btn-ghost" data-act="calRefresh">Reintentar</button> <button class="btn-ghost" data-act="calSettings">Revisar</button></div>`; }
+  else if(area.querySelector(".cal-err")){ area.innerHTML=""; }
+  const errBanner=(state.calLayers.google&&state.calError)?`<div class="cal-err">Google: ${esc(state.calError)} <button class="btn-ghost" data-act="calRefresh">Reintentar</button></div>`:"";
+  if(state.calView==="mes"){ if(tEl)tEl.textContent=monthTitle(calCursorDate()); area.innerHTML=errBanner+calMonthHTML()+calDayPanel(); }
+  else if(state.calView==="semana"){ if(tEl)tEl.textContent=weekTitle(calCursorDate()); area.innerHTML=errBanner+calWeekHTML()+calDayPanel(); }
+  else { if(tEl)tEl.textContent=""; area.innerHTML=errBanner+calAgendaHTML(); }
   bindContentArea(area);
 }
 function bindContentArea(area){ area.querySelectorAll("[data-act]").forEach(el=>{ const h=ACTIONS[el.dataset.act]; if(!h)return; const ev=el.dataset.ev||(el.tagName==="SELECT"||el.tagName==="INPUT"||el.tagName==="TEXTAREA"?"change":"click"); el["on"+ev]=e=>h(el,e); }); }
@@ -1277,62 +1315,91 @@ const DIAS=["lun","mar","mié","jue","vie","sáb","dom"];
 function monthTitle(d){ return MESES[d.getMonth()]+" "+d.getFullYear(); }
 function weekTitle(d){ const s=weekStart(d); const e=new Date(s); e.setDate(e.getDate()+6); return `${s.getDate()} ${MESES[s.getMonth()].slice(0,3)} – ${e.getDate()} ${MESES[e.getMonth()].slice(0,3)}`; }
 function weekStart(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); x.setHours(0,0,0,0); return x; }
-function evChip(ev){
-  const col=calColor(ev.cal);
-  const t=ev.allDay?"":hhmm(ev.start)+" ";
-  return `<div class="cal-ev" style="--ec:${col}" title="${esc((t?t:'')+ev.title)}"><span class="cal-ev-dot"></span><span class="cal-ev-t">${esc(t)}${esc(ev.title)}</span></div>`;
+function evChip(it){
+  const t=it.allDay?"":(it.time?it.time+" ":"");
+  return `<div class="cal-ev" style="--ec:${it.color}" title="${esc((t||'')+it.title)}"><span class="cal-ev-t">${esc(t)}${esc(it.title)}</span></div>`;
 }
 function calMonthHTML(){
   const cur=calCursorDate();
   const first=new Date(cur.getFullYear(),cur.getMonth(),1);
   const gridStart=weekStart(first);
   const gridEnd=new Date(gridStart); gridEnd.setDate(gridEnd.getDate()+41); gridEnd.setHours(23,59,59);
-  const evs=eventsForRange(gridStart,gridEnd);
-  const byDay={};
-  evs.forEach(ev=>{ const k=ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate())); (byDay[k]=byDay[k]||[]).push(ev); });
+  const byDay=itemsByDay(gridStart,gridEnd);
   const t0=ymd(calToday());
   let cells="";
   for(let i=0;i<42;i++){
     const d=new Date(gridStart); d.setDate(d.getDate()+i);
-    const k=ymd(d); const inMonth=d.getMonth()===cur.getMonth(); const isToday=k===t0;
+    const k=ymd(d); const inMonth=d.getMonth()===cur.getMonth(); const isToday=k===t0; const isSel=k===state.calDaySel;
     const dayEvs=(byDay[k]||[]);
     const shown=dayEvs.slice(0,3).map(evChip).join("");
     const more=dayEvs.length>3?`<div class="cal-more">+${dayEvs.length-3} más</div>`:"";
-    cells+=`<div class="cal-cell${inMonth?'':' out'}${isToday?' today':''}"><div class="cal-daynum">${d.getDate()}</div>${shown}${more}</div>`;
+    cells+=`<div class="cal-cell${inMonth?'':' out'}${isToday?' today':''}${isSel?' sel':''}" data-act="calDay" data-id="${k}"><div class="cal-daynum">${d.getDate()}</div>${shown}${more}</div>`;
   }
   const heads=DIAS.map(x=>`<div class="cal-dh">${x}</div>`).join("");
-  return `<div class="cal-month"><div class="cal-heads">${heads}</div><div class="cal-grid">${cells}</div></div>${calLegend()}`;
+  return `<div class="cal-month"><div class="cal-heads">${heads}</div><div class="cal-grid">${cells}</div></div>`;
 }
 function calWeekHTML(){
   const s=weekStart(calCursorDate());
   const e=new Date(s); e.setDate(e.getDate()+7);
-  const evs=eventsForRange(s,e);
+  const byDay=itemsByDay(s,e);
   const t0=ymd(calToday());
   let cols="";
   for(let i=0;i<7;i++){
     const d=new Date(s); d.setDate(d.getDate()+i); const k=ymd(d);
-    const dayEvs=evs.filter(ev=>ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate()))===k);
+    const dayEvs=byDay[k]||[];
     const items=dayEvs.length?dayEvs.map(evChip).join(""):`<div class="cal-empty-day">—</div>`;
-    cols+=`<div class="cal-wcol${k===t0?' today':''}"><div class="cal-wh">${DIAS[i]} ${d.getDate()}</div><div class="cal-wbody">${items}</div></div>`;
+    cols+=`<div class="cal-wcol${k===t0?' today':''}${k===state.calDaySel?' sel':''}" data-act="calDay" data-id="${k}"><div class="cal-wh">${DIAS[i]} ${d.getDate()}</div><div class="cal-wbody">${items}</div></div>`;
   }
-  return `<div class="cal-week">${cols}</div>${calLegend()}`;
+  return `<div class="cal-week">${cols}</div>`;
 }
 function calAgendaHTML(){
   const s=calToday(); const e=new Date(s); e.setDate(e.getDate()+30);
-  const evs=eventsForRange(s,e);
-  if(!evs.length) return `<div class="table-wrap"><div class="empty" style="padding:28px">No hay eventos en los próximos 30 días.</div></div>`;
-  const byDay={};
-  evs.forEach(ev=>{ const k=ymd(new Date(ev.start.getFullYear(),ev.start.getMonth(),ev.start.getDate())); (byDay[k]=byDay[k]||[]).push(ev); });
-  const rows=Object.keys(byDay).sort().map(k=>{
+  const byDay=itemsByDay(s,e);
+  const keys=Object.keys(byDay).sort();
+  if(!keys.length) return `<div class="table-wrap"><div class="empty" style="padding:28px">No hay nada agendado en los próximos 30 días.</div></div>`;
+  const rows=keys.map(k=>{
     const d=new Date(k+"T00:00");
-    const items=byDay[k].map(ev=>`<div class="cal-ag-ev"><span class="cal-ag-time">${ev.allDay?'todo el día':hhmm(ev.start)}</span><span class="cal-ev-dot" style="--ec:${calColor(ev.cal)}"></span><span class="cal-ag-t">${esc(ev.title)}</span>${ev.loc?`<span class="cal-ag-loc">${esc(ev.loc)}</span>`:''}</div>`).join("");
+    const items=byDay[k].map(it=>`<div class="cal-ag-ev" ${it.ref?`data-act="calGo" data-t="${it.ref.t}" data-id="${it.ref.id||''}" data-area="${it.ref.area||''}"`:''}><span class="cal-ag-time">${it.allDay?'—':it.time}</span><span class="cal-ev-dot" style="--ec:${it.color}"></span><span class="cal-ag-t">${esc(it.title)}</span><span class="cal-ag-layer">${layerMeta(it.layer).label}</span></div>`).join("");
     return `<div class="cal-ag-day"><div class="cal-ag-date">${DIAS[(d.getDay()+6)%7]} ${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}</div><div class="cal-ag-list">${items}</div></div>`;
   }).join("");
-  return `<div class="cal-agenda">${rows}</div>${calLegend()}`;
+  return `<div class="cal-agenda">${rows}</div>`;
 }
-function calLegend(){
-  if(state.calUrls.length<2)return "";
-  return `<div class="cal-legend">${state.calUrls.map((u,i)=>`<span><span class="cal-ev-dot" style="--ec:${calColor(i)}"></span> Calendario ${i+1}</span>`).join("")}</div>`;
+function calDayPanel(){
+  if(!state.calDaySel)return "";
+  const d=dOnly(state.calDaySel);
+  const items=(itemsByDay(d,d)[state.calDaySel]||[]);
+  const title=`${DIAS[(d.getDay()+6)%7]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
+  const rows=items.length?items.map(it=>`<div class="cal-dp-ev" ${it.ref?`data-act="calGo" data-t="${it.ref.t}" data-id="${it.ref.id||''}" data-area="${it.ref.area||''}"`:''}>
+      <span class="cal-ev-dot" style="--ec:${it.color}"></span>
+      <span class="cal-dp-time">${it.allDay?'todo el día':it.time}</span>
+      <span class="cal-dp-t">${esc(it.title)}</span>
+      <span class="cal-dp-layer">${layerMeta(it.layer).label}</span>
+    </div>`).join(""):`<p style="color:var(--tx-faint);font-size:.86em;margin:6px 0">Nada agendado este día.</p>`;
+  return `<div class="cal-daypanel">
+    <div class="cal-dp-head"><span style="font-weight:600;text-transform:capitalize">${title}</span><div class="spacer"></div><button class="btn-primary" data-act="evtNew" data-id="${state.calDaySel}">＋ Evento este día</button><button class="cal-dp-x" data-act="calDayClose">✕</button></div>
+    <div class="cal-dp-list">${rows}</div>
+  </div>`;
+}
+function openEventoEditor(id){
+  const e=id?getEvento(id):null;
+  const isNew=!e;
+  const ev=e||{id:crypto.randomUUID(),fecha:state.calDaySel||today(),inicio:"",fin:"",titulo:"",nota:"",color:"#0C447C"};
+  const COLS=["#0C447C","#0F6E56","#993556","#BA7517","#534AB7","#5F5E5A"];
+  state.evtSel=ev.id; state._evtDraft=ev; state._evtNew=isNew;
+  const swatches=COLS.map(c=>`<button class="evt-sw ${ev.color===c?'on':''}" data-act="evtColor" data-c="${c}" style="background:${c}"></button>`).join("");
+  openHtmlModal(`<div class="m-head"><h3>${isNew?'Nuevo evento':'Editar evento'}</h3><button class="m-x" data-act="evtClose">✕</button></div>
+    <div class="m-body">
+      <div class="m-field"><label>Título</label><input id="evt_tit" value="${esc(ev.titulo)}" data-act="evtF" data-f="titulo" placeholder="Ej. Almuerzo con proveedor"></div>
+      <div class="m-grid" style="grid-template-columns:1fr 110px 110px;margin-top:11px">
+        <div class="m-field"><label>Fecha</label><input id="evt_fec" type="date" value="${esc(ev.fecha)}" data-act="evtF" data-f="fecha"></div>
+        <div class="m-field"><label>Desde (opc.)</label><input id="evt_ini" type="time" value="${esc(ev.inicio)}" data-act="evtF" data-f="inicio"></div>
+        <div class="m-field"><label>Hasta (opc.)</label><input id="evt_fin" type="time" value="${esc(ev.fin)}" data-act="evtF" data-f="fin"></div>
+      </div>
+      <div class="m-field" style="margin-top:11px"><label>Nota</label><textarea id="evt_nota" class="m-detail" data-act="evtF" data-f="nota" placeholder="Detalle opcional">${esc(ev.nota)}</textarea></div>
+      <div class="m-field" style="margin-top:11px"><label>Color</label><div class="evt-sws">${swatches}</div></div>
+      ${ev.fecha?`<a class="gcal-btn" style="margin-top:12px" href="${esc(gcalLink({title:ev.titulo||'Evento',dstr:ev.fecha,time:ev.inicio,details:ev.nota}))}" target="_blank" rel="noopener"><span class="gcal-ic">🗓</span>Agendar también en Google</a>`:''}
+    </div>
+    <div class="modal-foot">${isNew?'<span></span>':`<button class="link-danger" data-act="evtDel" data-id="${ev.id}">Eliminar</button>`}<button class="btn-primary" data-act="evtSave">Guardar</button></div>`);
 }
 function calShift(dir){
   const d=calCursorDate();
@@ -1681,7 +1748,31 @@ const ACTIONS = {
   calRefresh:()=>{ state.calLoaded=false; loadCalendar(true); },
   calCancelEdit:()=>{ state.calEditing=false; render(); },
   calSettings:()=>{ state.calEditing=true; render(); },
-  calSave:()=>{ const el=$("#calUrlInput"); if(!el)return; state.calUrls=el.value.split("\n").map(s=>s.trim()).filter(Boolean); state.calEditing=false; state.calLoaded=false; state.calError=""; scheduleSaveSettings(); render(); if(state.calUrls.length)loadCalendar(true); },
+  calSave:()=>{ const el=$("#calUrlInput"); if(!el)return; state.calUrls=el.value.split("\n").map(s=>s.trim()).filter(Boolean); state.calEditing=false; state.calLoaded=false; state.calError=""; scheduleSaveSettings(); render(); if(state.calUrls.length&&state.calLayers.google)loadCalendar(true); },
+  calLayer:(el)=>{ const k=el.dataset.id; state.calLayers={...state.calLayers,[k]:!state.calLayers[k]}; if(k==="google"&&state.calLayers.google&&state.calUrls.length&&!state.calLoaded)loadCalendar(); const bar=document.querySelector(".cal-layers"); if(bar){ bar.outerHTML=calLayerBar(); const nb=document.querySelector(".cal-layers"); if(nb)nb.querySelectorAll("[data-act]").forEach(x=>{ const h=ACTIONS[x.dataset.act]; if(h)x.onclick=e=>h(x,e); }); } paintCalendar(); },
+  calDay:(el)=>{ state.calDaySel=(state.calDaySel===el.dataset.id)?null:el.dataset.id; paintCalendar(); },
+  calDayClose:()=>{ state.calDaySel=null; paintCalendar(); },
+  calGo:(el)=>{ const t=el.dataset.t; const id=el.dataset.id, area=el.dataset.area;
+    if(t==="evt"){ openEventoEditor(id); return; }
+    if(t==="task"){ state.view="tareas"; render(); setTimeout(()=>openModal(id),30); return; }
+    if(t==="bloque"){ const b=getBloque(id); if(b){ state.view="tareas"; state.taskView="bloques"; state.blocksDate=b.fecha; } render(); return; }
+    if(t==="reu"){ state.reuSel=id; if(area==="mesa"){ state.view="mesa"; } render(); return; }
+    if(t==="venc"){ state.view=area||"admin"; render(); return; }
+  },
+  evtNew:(el)=>{ if(el&&el.dataset.id)state.calDaySel=el.dataset.id; openEventoEditor(null); },
+  evtF:(el)=>{ if(!state._evtDraft)return; state._evtDraft[el.dataset.f]=el.value; },
+  evtColor:(el)=>{ if(!state._evtDraft)return; state._evtDraft.color=el.dataset.c; document.querySelectorAll(".evt-sw").forEach(s=>s.classList.toggle("on",s.dataset.c===el.dataset.c)); },
+  evtColorClose:()=>{},
+  evtClose:()=>{ closeModal(); },
+  evtSave:()=>{ const d=state._evtDraft; if(!d){ closeModal(); return; }
+    ["titulo","fecha","inicio","fin","nota"].forEach(f=>{ const el=$("#evt_"+({titulo:"tit",fecha:"fec",inicio:"ini",fin:"fin",nota:"nota"}[f])); if(el)d[f]=el.value; });
+    if(!d.titulo.trim()){ toast("Poné un título al evento."); return; }
+    if(!d.fecha){ toast("Elegí una fecha."); return; }
+    const existing=getEvento(d.id);
+    if(existing){ Object.assign(existing,d); } else { state.eventos.push({...d}); }
+    saveEventoNow(d.id); state._evtDraft=null; closeModal();
+  },
+  evtDel:(el)=>{ const id=el.dataset.id; if(!confirm("¿Eliminar este evento?"))return; state.eventos=state.eventos.filter(e=>e.id!==id); deleteEventoDb(id); state._evtDraft=null; closeModal(); },
   mesaFiltro:(el)=>{ state.mesaFiltro=el.dataset.id||""; render(); },
   mesaNew:()=>addMesaReunion(),
   mesaBack:()=>{ state.reuSel=null; render(); },
