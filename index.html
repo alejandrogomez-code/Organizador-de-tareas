@@ -284,6 +284,11 @@
   .cal-ag-t{ color:var(--tx); }
   .cal-ag-loc{ color:var(--tx-faint); font-size:.86em; }
   @media (max-width:720px){ .cal-week{ grid-template-columns:1fr; } .cal-cell{ min-height:66px; } }
+  .gcal-btn{ display:inline-flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--line); color:var(--tx-dim); border-radius:8px; padding:7px 12px; font-size:.84em; font-weight:500; text-decoration:none; white-space:nowrap; transition:border-color .14s ease,color .14s ease,background .14s ease; }
+  .gcal-btn:hover{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .gcal-btn .gcal-ic{ font-size:1.05em; }
+  .row-gcal{ text-decoration:none; font-size:1em; opacity:.7; }
+  .row-gcal:hover{ opacity:1; }
   .mx-layout{ display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:14px; align-items:start; }
   .mx-grid{ display:grid; grid-template-columns:16px 1fr; grid-template-rows:auto 1fr; gap:6px; position:sticky; top:8px; }
   .mx-axis-top{ grid-column:2; display:grid; grid-template-columns:1fr 1fr; font-size:.76em; color:var(--tx-dim); font-weight:600; text-align:center; padding-bottom:2px; }
