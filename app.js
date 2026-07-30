@@ -1040,7 +1040,7 @@ function vencRow(v){
     <td><select class="cell-edit" data-act="vencF" data-id="${v.id}" data-f="resp">${optionList(state.responsables,v.resp,"—")}</select></td>
     <td><input class="cell-edit" style="min-width:150px" value="${esc(v.nota)}" data-act="vencF" data-id="${v.id}" data-f="nota" placeholder="Nota / link"></td>
     <td style="text-align:center">${estado}</td>
-    <td style="text-align:center"><button class="row-del" data-act="vencDel" data-id="${v.id}">🗑</button></td></tr>`;
+    <td style="text-align:center;white-space:nowrap">${v.due&&v.status!=='ok'?`<a class="row-gcal" href="${esc(gcalLink({title:"Vence: "+(v.concepto||'—'),dstr:v.due,details:(v.tipo?v.tipo:'')+(v.nota?" · "+v.nota:'')}))}" target="_blank" rel="noopener" title="Agendar en Google Calendar">🗓</a> `:''}<button class="row-del" data-act="vencDel" data-id="${v.id}">🗑</button></td></tr>`;
 }
 function sectionVenc(secId){
   const all=state.vencimientos.filter(v=>v.area===secId);
@@ -1117,6 +1117,38 @@ function reunionEditor(secId,r){
     <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
     <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="reuBack">Listo</button></div>
   </div>`;
+}
+
+/* ---------- Agendar en Google (link prellenado, sin OAuth) ---------- */
+function gcalPad(n){ return String(n).padStart(2,"0"); }
+function gcalDate(dstr,timeStr){
+  // dstr: 'YYYY-MM-DD'. timeStr opcional 'HH:MM'. Devuelve rango dates= para el link.
+  if(!dstr) return "";
+  const clean=dstr.replace(/-/g,"");
+  if(timeStr && /^\d{1,2}:\d{2}$/.test(timeStr)){
+    const [h,m]=timeStr.split(":").map(Number);
+    const startD=new Date(dstr+"T00:00"); startD.setHours(h,m,0,0);
+    const endD=new Date(startD.getTime()+60*60*1000);
+    const f=x=>x.getFullYear()+gcalPad(x.getMonth()+1)+gcalPad(x.getDate())+"T"+gcalPad(x.getHours())+gcalPad(x.getMinutes())+"00";
+    return f(startD)+"/"+f(endD);
+  }
+  // todo el día: la fecha de fin es el día siguiente (regla de Google)
+  const d=new Date(dstr+"T00:00"); d.setDate(d.getDate()+1);
+  const next=d.getFullYear()+gcalPad(d.getMonth()+1)+gcalPad(d.getDate());
+  return clean+"/"+next;
+}
+function gcalLink({title,dstr,time,details,location}){
+  const p=new URLSearchParams();
+  p.set("action","TEMPLATE");
+  p.set("text",title||"Evento");
+  const dr=gcalDate(dstr,time); if(dr)p.set("dates",dr);
+  if(details)p.set("details",details);
+  if(location)p.set("location",location);
+  return "https://calendar.google.com/calendar/render?"+p.toString();
+}
+function gcalBtn(opts,label){
+  const href=gcalLink(opts);
+  return `<a class="gcal-btn" href="${esc(href)}" target="_blank" rel="noopener" title="Abre Google Calendar con el evento prellenado"><span class="gcal-ic">🗓</span>${esc(label||"Agendar en Google")}</a>`;
 }
 
 /* ---------- Calendario (Google ICS, solo lectura vía proxy) ---------- */
@@ -1392,7 +1424,7 @@ function mesaEditor(r){
     </div>`;
   }).join("");
   const nD=(r.compromisos||[]).filter(c=>c.done).length, nC=(r.compromisos||[]).length;
-  return `<button class="btn-ghost" data-act="mesaBack" style="margin-bottom:14px">← Volver a Mesa Ejecutiva</button>
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><button class="btn-ghost" data-act="mesaBack">← Volver a Mesa Ejecutiva</button><div class="spacer"></div>${gcalBtn({title:r.titulo||(foroById(r.tipo)||{}).label||"Reunión",dstr:r.fecha,details:(r.temas?"Temas: "+r.temas:"")+(r.participantes?"\nParticipantes: "+r.participantes:"")},"Agendar esta reunión")}</div>
   <div class="scard">
     <div class="m-grid" style="grid-template-columns:170px 1fr 170px">
       <div class="m-field"><label>Foro</label><select id="reu_tipo" data-act="reuF" data-f="tipo">${fs.map(f=>`<option value="${esc(f.id)}" ${r.tipo===f.id?'selected':''}>${esc(f.label)}</option>`).join("")}</select></div>
@@ -1417,7 +1449,7 @@ function mesaEditor(r){
     <div style="margin-top:14px"><div class="m-block-h"><span>Adjuntos (acta, minuta, PDF…)</span></div>
       <div class="attach-row" style="flex-wrap:wrap">${(r.archivos||[]).map((f,i)=>`<span class="file-pill">📎 <button class="lnk" data-act="reuFileOpen" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-act="reuFileDel" data-i="${i}" style="opacity:1">✕</button></span>`).join("")}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="reu_file" data-act="reuFileUp" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label><span id="reu_busy" style="font-size:.8em;color:var(--tx-faint);display:none">Subiendo…</span></div></div>
 
-    <div class="m-field" style="margin-top:14px;max-width:200px"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>
+    <div style="display:flex;align-items:flex-end;gap:10px;margin-top:14px"><div class="m-field" style="max-width:200px;margin:0"><label>Próxima reunión</label><input id="reu_prox" type="date" value="${esc(r.proxima)}" data-act="reuF" data-f="proxima"></div>${r.proxima?gcalBtn({title:"Seguimiento: "+(r.titulo||(foroById(r.tipo)||{}).label||"Reunión"),dstr:r.proxima,details:r.pend?"Para tratar: "+r.pend:""},"Agendar próxima"):''}</div>
     <div class="modal-foot" style="margin:16px -18px -16px;border-radius:0"><button class="link-danger" data-act="reuDel" data-id="${r.id}">Eliminar reunión</button><button class="btn-primary" data-act="mesaBack">Listo</button></div>
   </div>`;
 }
