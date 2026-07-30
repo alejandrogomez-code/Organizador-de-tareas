@@ -1120,7 +1120,7 @@ function reunionEditor(secId,r){
 }
 
 /* ---------- Calendario (Google ICS, solo lectura vía proxy) ---------- */
-const ICS_PROXY = SUPABASE_URL + "/functions/v1/ics-proxy";
+const ICS_PROXY = "/api/ics-proxy";
 function calToday(){ return new Date(today()+"T00:00"); }
 function calCursorDate(){ return state.calCursor?new Date(state.calCursor+"T00:00"):calToday(); }
 function ymd(d){ return d.toISOString().slice(0,10); }
@@ -1190,7 +1190,7 @@ async function loadCalendar(force){
   try{
     for(let i=0;i<state.calUrls.length;i++){
       const u=state.calUrls[i]; if(!u.trim())continue;
-      const res=await fetch(ICS_PROXY,{ method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_ANON_KEY, "apikey":SUPABASE_ANON_KEY }, body:JSON.stringify({url:u.trim()}) });
+      const res=await fetch(ICS_PROXY,{ method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({url:u.trim()}) });
       if(!res.ok){ let msg="Error "+res.status; try{ const j=await res.json(); if(j.error)msg=j.error; }catch{} throw new Error(msg); }
       const txt=await res.text();
       all.push(...parseIcs(txt,i));
