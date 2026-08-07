@@ -374,6 +374,8 @@ function viewTasks(){
       <button class="btn-ghost" data-act="blkDay" data-id="next" title="Día siguiente">›</button>
       <button class="btn-ghost" data-act="blkDay" data-id="today">Hoy</button>
       <button class="btn-ghost" data-act="blkClose" title="Repasar el día y pasar lo pendiente al día siguiente">✓ Cierre del día</button>
+      <button class="btn-ghost" data-act="blkExportXlsx" title="Descargar el día en Excel">⬇ Excel</button>
+      <button class="btn-ghost" data-act="blkExportPdf" title="Descargar el día en PDF">⬇ PDF</button>
       <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
     </div><div id="taskArea"></div>`;
   }
@@ -637,6 +639,101 @@ function copyPrevBloques(){
   if(!src.length){ toast("El día anterior no tiene bloques para copiar."); return; }
   src.forEach(b=>{ const nb={id:crypto.randomUUID(),fecha:state.blocksDate,nombre:b.nombre,inicio:b.inicio,fin:b.fin,orden:b.orden,tareas:[...b.tareas]}; state.bloques.push(nb); saveBloqueNow(nb.id); });
   toast(`Se copiaron ${src.length} bloque${src.length===1?'':'s'} de ayer.`); paintTasks();
+}
+
+/* ---------- Exportar el día (Excel + PDF) ---------- */
+function dayExportData(){
+  const list=dayBloques();
+  const fmtRange=b=>{ const i=(b.inicio||"").trim(),f=(b.fin||"").trim(); if(i&&f)return i+" – "+f; if(i)return "desde "+i; if(f)return "hasta "+f; return ""; };
+  return list.map(b=>({
+    nombre:b.nombre||"Bloque",
+    horario:fmtRange(b),
+    tareas:(b.tareas||[]).map(id=>{
+      const t=taskById(id); if(!t)return null;
+      return { title:t.title||"", area:t.area||"", resp:t.resp||"", status:stMeta(t.status).label,
+               subs:(t.subs||[]).map(s=>({t:s.t||"",d:!!s.d})) };
+    }).filter(Boolean)
+  }));
+}
+function dlBlob(content,mime,filename){
+  const blob=new Blob([content],{type:mime}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },200);
+}
+function exportDiaXlsx(){
+  const data=dayExportData();
+  if(!data.length){ toast("No hay bloques para exportar en este día."); return; }
+  const xesc=s=>(s||"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[c]));
+  const cell=(v,style)=>`<Cell${style?` ss:StyleID="${style}"`:""}><Data ss:Type="String">${xesc(v)}</Data></Cell>`;
+  const row=cells=>`<Row>${cells}</Row>`;
+  let rows="";
+  rows+=row(cell(longDate(state.blocksDate),"sTitle"));
+  rows+=row("");
+  data.forEach(b=>{
+    rows+=row(cell(b.nombre,"sBlock")+cell(b.horario,"sBlock"));
+    rows+=row(cell("Tarea","sHead")+cell("Área","sHead")+cell("Responsable","sHead")+cell("Estado","sHead"));
+    if(!b.tareas.length){ rows+=row(cell("(sin tareas)","sMuted")); }
+    b.tareas.forEach(t=>{
+      rows+=row(cell(t.title)+cell(t.area)+cell(t.resp)+cell(t.status));
+      t.subs.forEach(s=>{ rows+=row(cell((s.d?"☑ ":"☐ ")+"    · "+s.t,"sSub")); });
+    });
+    rows+=row("");
+  });
+  const xml=`<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="14"/></Style>
+<Style ss:ID="sBlock"><Font ss:Bold="1" ss:Size="11" ss:Color="#FFFFFF"/><Interior ss:Color="#4C5BD4" ss:Pattern="Solid"/></Style>
+<Style ss:ID="sHead"><Font ss:Bold="1"/><Interior ss:Color="#ECEEFB" ss:Pattern="Solid"/></Style>
+<Style ss:ID="sSub"><Font ss:Color="#6B7280"/></Style>
+<Style ss:ID="sMuted"><Font ss:Italic="1" ss:Color="#9AA1AC"/></Style>
+</Styles>
+<Worksheet ss:Name="Día">
+<Table>
+<Column ss:Width="320"/><Column ss:Width="140"/><Column ss:Width="120"/><Column ss:Width="100"/>
+${rows}
+</Table>
+</Worksheet>
+</Workbook>`;
+  dlBlob(xml,"application/vnd.ms-excel","Dia_"+state.blocksDate+".xls");
+  toast("Excel descargado.");
+}
+function exportDiaPdf(){
+  const data=dayExportData();
+  if(!data.length){ toast("No hay bloques para exportar en este día."); return; }
+  const e=esc;
+  const blocksHtml=data.map(b=>{
+    const tareas=b.tareas.length?b.tareas.map(t=>{
+      const subs=t.subs.length?`<ul class="subs">${t.subs.map(s=>`<li class="${s.d?'done':''}">${s.d?'☑':'☐'} ${e(s.t)}</li>`).join("")}</ul>`:"";
+      const meta=[t.area,t.resp,t.status].filter(Boolean).map(e).join(" · ");
+      return `<div class="task"><div class="tt">${e(t.title)}</div>${meta?`<div class="tm">${meta}</div>`:""}${subs}</div>`;
+    }).join(""):`<div class="empty">Sin tareas.</div>`;
+    return `<section class="blk"><div class="bh"><span class="bn">${e(b.nombre)}</span>${b.horario?`<span class="br">${e(b.horario)}</span>`:""}</div>${tareas}</section>`;
+  }).join("");
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Día ${e(state.blocksDate)}</title>
+<style>
+  *{box-sizing:border-box;} body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#1f2430;margin:32px;line-height:1.45;}
+  h1{font-size:20px;margin:0 0 4px;text-transform:capitalize;} .sub{color:#6b7280;font-size:12px;margin:0 0 20px;}
+  .blk{border:1px solid #e4e7eb;border-radius:8px;margin-bottom:14px;overflow:hidden;page-break-inside:avoid;}
+  .bh{background:#4c5bd4;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;}
+  .bn{font-weight:600;font-size:13px;} .br{font-size:12px;opacity:.9;}
+  .task{padding:8px 12px;border-top:1px solid #eef0f3;} .task:first-of-type{border-top:0;}
+  .tt{font-weight:600;font-size:13px;} .tm{color:#6b7280;font-size:11px;margin-top:2px;}
+  .subs{margin:6px 0 0;padding-left:14px;list-style:none;} .subs li{font-size:12px;color:#4b5563;margin:2px 0;}
+  .subs li.done{color:#9aa1ac;text-decoration:line-through;}
+  .empty{padding:8px 12px;color:#9aa1ac;font-size:12px;font-style:italic;}
+  @media print{body{margin:14mm;} @page{margin:12mm;}}
+</style></head><body>
+<h1>${e(longDate(state.blocksDate))}</h1>
+<p class="sub">${data.length} bloque${data.length===1?'':'s'} · ${data.reduce((n,b)=>n+b.tareas.length,0)} tarea(s)</p>
+${blocksHtml}
+<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
+</body></html>`;
+  const w=window.open("","_blank");
+  if(!w){ toast("Permití las ventanas emergentes para exportar el PDF."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  toast("Se abrió la vista de impresión — elegí “Guardar como PDF”.");
 }
 
 /* ---------- Modal genérico (reutiliza #overlay/#modal) ---------- */
@@ -1806,6 +1903,8 @@ const ACTIONS = {
   blkView:(el)=>{ state.blkView=el.dataset.id; state.blkOpen=null; scheduleSaveSettings(); paintTasks(); },
   blkToggle:(el)=>{ state.blkOpen=state.blkOpen===el.dataset.id?null:el.dataset.id; paintTasks(); },
   blkClose:()=>openCierreDia(),
+  blkExportXlsx:()=>exportDiaXlsx(),
+  blkExportPdf:()=>exportDiaPdf(),
   cierreMove:()=>cierreMoverPendientes(),
   cierreClose:()=>{ closeModal(); },
   revSemanal:()=>openRevisionSemanal(),
