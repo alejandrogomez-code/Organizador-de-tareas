@@ -1689,10 +1689,54 @@ function sectionSGC(){
   const mRows=M.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.mejora_realizada||r.notas||'—')}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
   const pRows=P.map(r=>`<tr><td>${esc(r.procedimiento||'—')}</td><td>${r.area?esc(r.area):'—'}</td><td style="text-align:center">${r.version?esc(r.version):'—'}</td><td>${r.estado?esc(r.estado):'—'}</td><td class="date" style="white-space:nowrap">${r.fecha_proxima_revision?fmt(r.fecha_proxima_revision):'—'}</td><td style="text-align:center">${r.link?`<a class="icon-link" href="${esc(r.link)}" target="_blank">🔗</a>`:'—'}</td></tr>`).join("");
   const block=(title,n,head,rows,empty)=>`<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">${title} <span style="color:var(--tx-faint);font-weight:400">· ${n}</span></h3><div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr>${head}</tr></thead><tbody>${rows||`<tr><td colspan="6"><div class="empty" style="padding:22px">${empty}</div></td></tr>`}</tbody></table></div></div>`;
-  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde tu app de Calidad · solo lectura (se editan en esa app).</span><div style="flex:1"></div><button class="btn-ghost" data-act="calReload">↻ Actualizar</button></div>
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde tu app de Calidad · solo lectura (se editan en esa app).</span><div style="flex:1"></div><button class="btn-ghost" data-act="calExportPdf" title="Descargar hallazgos abiertos y en tratamiento en PDF">⬇ PDF hallazgos</button><button class="btn-ghost" data-act="calReload">↻ Actualizar</button></div>
     ${block("Hallazgos sin cerrar",H.length,"<th>Detección</th><th>Área</th><th>Resumen</th><th>Severidad</th><th>Estado</th><th>Responsable</th>",hRows,"Sin hallazgos abiertos.")}
     ${block("Mejoras en curso",M.length,"<th>Fecha</th><th>Área</th><th>Mejora</th><th>Estado</th><th>Responsable</th>",mRows,"Sin mejoras pendientes.")}
     ${block("Procedimientos en revisión",P.length,"<th>Procedimiento</th><th>Área</th><th>Versión</th><th>Estado</th><th>Próx. revisión</th><th>Link</th>",pRows,"Sin procedimientos en revisión.")}`;
+}
+function exportHallazgosPdf(){
+  const c=state.cal||{}; const all=c.hallazgos||[];
+  // solo abiertos + en tratamiento (excluye cerrados / completados / finalizados / descartados / anulados)
+  const H=all.filter(r=>{ const s=(r.estado||"").toLowerCase(); return !/cerr|complet|finaliz|resuelt|descart|anul|cancel/.test(s); });
+  if(!H.length){ toast("No hay hallazgos abiertos o en tratamiento para exportar."); return; }
+  H.sort((a,b)=>(a.fecha_deteccion||"").localeCompare(b.fecha_deteccion||""));
+  const e=esc;
+  const sevClass=s=>{ const t=(s||"").toLowerCase(); return /alt|crit|may/.test(t)?'sev-alta':/med|men/.test(t)?'sev-media':'sev-baja'; };
+  const rows=H.map(r=>`<tr>
+    <td class="nowrap">${r.fecha_deteccion?e(fmt(r.fecha_deteccion)):'—'}</td>
+    <td>${r.area?e(r.area):'—'}</td>
+    <td class="res">${e(r.resumen||'—')}</td>
+    <td class="nowrap"><span class="sev ${sevClass(r.severidad)}">${e(r.severidad||'—')}</span></td>
+    <td class="nowrap">${r.estado?e(r.estado):'—'}</td>
+    <td class="nowrap">${r.responsable?e(r.responsable):'—'}</td>
+  </tr>`).join("");
+  const hoy=new Date().toLocaleDateString("es-AR",{day:"2-digit",month:"long",year:"numeric"});
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Hallazgos sin cerrar</title>
+<style>
+  *{box-sizing:border-box;} body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#1f2430;margin:28px;line-height:1.4;}
+  h1{font-size:19px;margin:0 0 2px;} .sub{color:#6b7280;font-size:12px;margin:0 0 18px;}
+  table{width:100%;border-collapse:collapse;font-size:11px;}
+  thead th{background:#eceefb;color:#1f2430;text-align:left;padding:7px 8px;border-bottom:2px solid #4c5bd4;font-size:10px;text-transform:uppercase;letter-spacing:.4px;}
+  tbody td{padding:7px 8px;border-bottom:1px solid #e4e7eb;vertical-align:top;}
+  tbody tr:nth-child(even){background:#fafbfc;}
+  .nowrap{white-space:nowrap;} .res{max-width:380px;}
+  .sev{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:600;}
+  .sev-alta{background:#fdecec;color:#c2353a;} .sev-media{background:#fff4e5;color:#b26a00;} .sev-baja{background:#eef0f3;color:#6b7280;}
+  tr{page-break-inside:avoid;}
+  @media print{body{margin:12mm;} @page{margin:11mm;}}
+</style></head><body>
+<h1>Sistema de Calidad — Hallazgos sin cerrar</h1>
+<p class="sub">Abiertos y en tratamiento · ${H.length} hallazgo${H.length===1?'':'s'} · Generado el ${e(hoy)}</p>
+<table>
+  <thead><tr><th>Detección</th><th>Área</th><th>Resumen</th><th>Severidad</th><th>Estado</th><th>Responsable</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
+</body></html>`;
+  const w=window.open("","_blank");
+  if(!w){ toast("Permití las ventanas emergentes para exportar el PDF."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  toast("Se abrió la vista de impresión — elegí “Guardar como PDF”.");
 }
 
 /* ---------- Cierres contables (reflejado desde app de Administración) ---------- */
@@ -1818,6 +1862,7 @@ const ACTIONS = {
   // secciones operativas
   secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.calLoaded && !state.calLoading) loadCalidad(); if(el.dataset.id==='cierres' && !state.admLoaded && !state.admLoading) loadAdmin(); },
   calReload:()=>loadCalidad(),
+  calExportPdf:()=>exportHallazgosPdf(),
   admReload:()=>loadAdmin(),
   admPick:(el)=>{ state.admCierreSel=el.dataset.id; render(); },
   secScEdit:()=>{ state.secScEdit=!state.secScEdit; render(); },
