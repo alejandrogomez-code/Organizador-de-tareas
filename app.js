@@ -97,7 +97,7 @@ const state = {
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
-  finPagos:[], finConceptos:[], finFilters:{concepto:"",estado:"",desde:"",hasta:""}, finGroup:"semana",
+  finPagos:[], finConceptos:[], finTC:0, finFilters:{concepto:"",estado:"",desde:"",hasta:"",q:""}, finGroup:"semana",
 };
 
 /* ============================================================
@@ -127,8 +127,8 @@ function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
-function serFinPago(p){ return {id:p.id,user_id:UID,fecha:p.fecha||null,concepto:p.concepto||null,importe_ars:p.importeArs!=null&&p.importeArs!==""?Number(p.importeArs):null,tc:p.tc!=null&&p.tc!==""?Number(p.tc):null,estado:p.estado||"pend"}; }
-function deFinPago(r){ return {id:r.id,fecha:r.fecha||"",concepto:r.concepto||"",importeArs:r.importe_ars!=null?Number(r.importe_ars):0,tc:r.tc!=null?Number(r.tc):0,estado:r.estado||"pend"}; }
+function serFinPago(p){ return {id:p.id,user_id:UID,fecha:p.fecha||null,concepto:p.concepto||null,detalle:p.detalle||null,importe_ars:p.importeArs!=null&&p.importeArs!==""?Number(p.importeArs):null,tc:p.tc!=null&&p.tc!==""?Number(p.tc):null,estado:p.estado||"pend"}; }
+function deFinPago(r){ return {id:r.id,fecha:r.fecha||"",concepto:r.concepto||"",detalle:r.detalle||"",importeArs:r.importe_ars!=null?Number(r.importe_ars):0,tc:r.tc!=null?Number(r.tc):0,estado:r.estado||"pend"}; }
 function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,tipo:r.tipo||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||null}; }
 function deReu(r){ return {id:r.id,area:r.area||"",tipo:r.tipo||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:(r.compromisos||[]).map(c=>({t:c.t||"",done:!!c.done,taskId:c.taskId||null,resp:c.resp||"",due:c.due||""})),urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
 function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titulo||"",categoria:d.categoria||null,url:d.url||null,files:d.files||[],nota:d.nota||null,fecha:d.fecha||null}; }
@@ -147,7 +147,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers,finConceptos:state.finConceptos},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers,finConceptos:state.finConceptos,finTC:state.finTC},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -194,8 +194,8 @@ async function loadAll(){
   // settings
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
-  if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.finConceptos=[...DEFAULTS.finConceptos]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; state.finConceptos=(st.prefs&&Array.isArray(st.prefs.finConceptos)&&st.prefs.finConceptos.length)?st.prefs.finConceptos:[...DEFAULTS.finConceptos]; }
+  if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.finConceptos=[...DEFAULTS.finConceptos]; state.finTC=0; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; state.finConceptos=(st.prefs&&Array.isArray(st.prefs.finConceptos)&&st.prefs.finConceptos.length)?st.prefs.finConceptos:[...DEFAULTS.finConceptos]; state.finTC=(st.prefs&&typeof st.prefs.finTC==='number')?st.prefs.finTC:0; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -1831,7 +1831,7 @@ function sectionCierres(){
 }
 
 /* ---------- Planificación Financiera ---------- */
-function addFinPago(){ const p={id:crypto.randomUUID(),fecha:today(),concepto:(state.finConceptos&&state.finConceptos[0])||"",importeArs:0,tc:0,estado:"pend"}; state.finPagos.unshift(p); saveFinPagoNow(p.id); render(); }
+function addFinPago(){ const p={id:crypto.randomUUID(),fecha:today(),concepto:(state.finConceptos&&state.finConceptos[0])||"",detalle:"",importeArs:0,tc:state.finTC||0,estado:"pend"}; state.finPagos.unshift(p); saveFinPagoNow(p.id); render(); }
 function delFinPago(id){ state.finPagos=state.finPagos.filter(p=>p.id!==id); deleteFinPagoDb(id); render(); }
 function finFiltered(){
   const f=state.finFilters;
@@ -1840,6 +1840,7 @@ function finFiltered(){
     if(f.estado&&p.estado!==f.estado)return false;
     if(f.desde&&(!p.fecha||p.fecha<f.desde))return false;
     if(f.hasta&&(!p.fecha||p.fecha>f.hasta))return false;
+    if(f.q&&!(p.detalle||"").toLowerCase().includes(f.q.toLowerCase()))return false;
     return true;
   });
 }
@@ -1865,8 +1866,9 @@ function finRow(p){
   return `<tr>
     <td><input type="date" class="cell-edit" value="${esc(p.fecha)}" data-act="finF" data-id="${p.id}" data-f="fecha"></td>
     <td><select class="cell-edit" data-act="finF" data-id="${p.id}" data-f="concepto">${optionList(state.finConceptos,p.concepto,"— Elegir —")}</select></td>
+    <td><input class="cell-edit" style="min-width:160px" value="${esc(p.detalle)}" placeholder="Detalle…" data-act="finF" data-id="${p.id}" data-f="detalle"></td>
     <td><input type="number" step="0.01" class="cell-edit" style="text-align:right" value="${p.importeArs||''}" placeholder="0" data-act="finF" data-id="${p.id}" data-f="importeArs"></td>
-    <td><input type="number" step="0.0001" class="cell-edit" style="text-align:right" value="${p.tc||''}" placeholder="0" data-act="finF" data-id="${p.id}" data-f="tc"></td>
+    <td style="text-align:right;white-space:nowrap;color:var(--tx-dim)">${p.tc?money(p.tc):'—'}</td>
     <td style="text-align:right;white-space:nowrap">US$ ${money(usd)}</td>
     <td style="text-align:center"><select class="status-pill ${st.cls}" data-act="finF" data-id="${p.id}" data-f="estado">${PAGO_ESTADOS.map(s=>`<option value="${s.key}" ${s.key===p.estado?'selected':''}>${s.label}</option>`).join("")}</select></td>
     <td style="text-align:center"><button class="row-del" data-act="finDel" data-id="${p.id}">🗑</button></td>
@@ -1882,20 +1884,26 @@ function sectionFinanzas(){
   const groupSeg=`<div class="seg"><button class="${state.finGroup==='dia'?'on':''}" data-act="finGroup" data-id="dia">Día</button><button class="${state.finGroup==='semana'?'on':''}" data-act="finGroup" data-id="semana">Semana</button><button class="${state.finGroup==='mes'?'on':''}" data-act="finGroup" data-id="mes">Mes</button></div>`;
   const totals=finTotals(list,state.finGroup);
   const totalRows=totals.map(t=>`<tr><td>${esc(t.label)}</td><td style="text-align:center">${t.n}</td><td style="text-align:right">$ ${money(t.ars)}</td><td style="text-align:right">US$ ${money(t.usd)}</td></tr>`).join("");
-  const filtActivo=f.concepto||f.estado||f.desde||f.hasta;
-  return `<div style="display:flex;gap:10px;align-items:center;margin-bottom:13px;flex-wrap:wrap">
+  const filtActivo=f.concepto||f.estado||f.desde||f.hasta||f.q;
+  return `<div class="scard" style="margin-bottom:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <label style="font-size:.86em;color:var(--tx-dim);font-weight:600">💱 Tipo de cambio del día</label>
+      <input type="number" step="0.0001" class="inp" style="width:140px" placeholder="0" value="${state.finTC||''}" data-act="finTCSet">
+      <span style="font-size:.8em;color:var(--tx-faint)">Se aplica automáticamente a todos los pagos (los ya cargados y los nuevos).</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:13px;flex-wrap:wrap">
       <div class="filters">
         <select class="inp" data-act="finFilter" data-id="concepto">${optionList(state.finConceptos,f.concepto,"Todos los conceptos")}</select>
         <select class="inp" data-act="finFilter" data-id="estado"><option value="">Todos los estados</option>${PAGO_ESTADOS.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
         <input type="date" class="inp" style="width:auto" title="Desde" value="${esc(f.desde)}" data-act="finFilter" data-id="desde">
         <input type="date" class="inp" style="width:auto" title="Hasta" value="${esc(f.hasta)}" data-act="finFilter" data-id="hasta">
+        <input type="search" class="inp" placeholder="Buscar en detalle…" value="${esc(f.q)}" data-act="finFilter" data-id="q">
         ${filtActivo?'<button class="btn-ghost" data-act="finFilterClear">✕ Limpiar filtros</button>':''}
       </div>
       <div class="spacer"></div>
       <button class="btn-primary" data-act="finAdd">＋ Nuevo pago</button>
     </div>
-    <div class="table-wrap"><table class="tasks" style="min-width:860px"><thead><tr><th>Fecha de pago</th><th>Concepto</th><th>Importe $ (ARS)</th><th>T.C.</th><th>Importe US$</th><th style="text-align:center">Estado</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="7"><div class="empty">Sin pagos cargados. Agregá sueldos, VEP, pagos al exterior, préstamos…</div></td></tr>'}</tbody></table></div>
+    <div class="table-wrap"><table class="tasks" style="min-width:960px"><thead><tr><th>Fecha de pago</th><th>Concepto</th><th>Detalle</th><th>Importe $ (ARS)</th><th>T.C.</th><th>Importe US$</th><th style="text-align:center">Estado</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8"><div class="empty">Sin pagos cargados. Agregá sueldos, VEP, pagos al exterior, préstamos…</div></td></tr>'}</tbody></table></div>
     <div class="scard" style="margin-top:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
         <h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em;margin:0">Totales</h3>
@@ -1907,7 +1915,7 @@ function sectionFinanzas(){
       <tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total ${filtActivo?'(filtrado)':'general'}</td><td style="text-align:center">${list.length}</td><td style="text-align:right">$ ${money(totalArs)}</td><td style="text-align:right">US$ ${money(totalUsd)}</td></tr>
       </tbody></table></div>
     </div>
-    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula multiplicando el importe en pesos por el tipo de cambio cargado en cada fila. Los conceptos se administran desde Configuración.</p>`;
+    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula multiplicando el importe en pesos por el tipo de cambio del día. Los conceptos se administran desde Configuración.</p>`;
 }
 
 /* ============================================================
@@ -2000,8 +2008,9 @@ const ACTIONS = {
   finDel:(el)=>delFinPago(el.dataset.id),
   finF:(el)=>{ const p=getFinPago(el.dataset.id); if(!p)return; const f=el.dataset.f; p[f]=(f==='importeArs'||f==='tc')?(el.value===''?0:parseFloat(el.value)):el.value; scheduleSaveFinPago(p.id); render(); },
   finFilter:(el)=>{ state.finFilters[el.dataset.id]=el.value; render(); },
-  finFilterClear:()=>{ state.finFilters={concepto:"",estado:"",desde:"",hasta:""}; render(); },
+  finFilterClear:()=>{ state.finFilters={concepto:"",estado:"",desde:"",hasta:"",q:""}; render(); },
   finGroup:(el)=>{ state.finGroup=el.dataset.id; render(); },
+  finTCSet:(el)=>{ const v=el.value===''?0:parseFloat(el.value); state.finTC=isNaN(v)?0:v; state.finPagos.forEach(p=>{ p.tc=state.finTC; scheduleSaveFinPago(p.id); }); scheduleSaveSettings(); render(); },
   reuNew:(el)=>addReunion(el.dataset.id),
   reuOpen:(el)=>{ state.reuSel=el.dataset.id; render(); },
   reuBack:()=>{ state.reuSel=null; render(); },
