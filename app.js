@@ -72,6 +72,7 @@ const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
 const PAGO_ESTADOS = [{key:"pend",label:"Pendiente",cls:"st-sin"},{key:"proc",label:"En proceso",cls:"st-proc"},{key:"comp",label:"Completado",cls:"st-comp"}];
 const pagoEstMeta = k => PAGO_ESTADOS.find(s=>s.key===k) || PAGO_ESTADOS[0];
 const money = n => (Number(n)||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const finUsd = p => { const ars=Number(p&&p.importeArs)||0, tc=Number(p&&p.tc)||0; return tc?ars/tc:0; };
 
 /* ============================================================
    Estado
@@ -1856,13 +1857,13 @@ function finTotals(list,mode){
     const g=finGroupInfo(p.fecha,mode);
     if(!map.has(g.key))map.set(g.key,{key:g.key,label:g.label,ars:0,usd:0,n:0});
     const e=map.get(g.key);
-    e.ars+=Number(p.importeArs)||0; e.usd+=(Number(p.importeArs)||0)*(Number(p.tc)||0); e.n++;
+    e.ars+=Number(p.importeArs)||0; e.usd+=finUsd(p); e.n++;
   });
   return [...map.values()].sort((a,b)=>a.key<b.key?-1:1);
 }
 function finRow(p){
   const st=pagoEstMeta(p.estado);
-  const usd=(Number(p.importeArs)||0)*(Number(p.tc)||0);
+  const usd=finUsd(p);
   return `<tr>
     <td><input type="date" class="cell-edit" value="${esc(p.fecha)}" data-act="finF" data-id="${p.id}" data-f="fecha"></td>
     <td><select class="cell-edit" data-act="finF" data-id="${p.id}" data-f="concepto">${optionList(state.finConceptos,p.concepto,"— Elegir —")}</select></td>
@@ -1880,7 +1881,7 @@ function sectionFinanzas(){
   const sorted=[...list].sort((a,b)=>(a.fecha||'9999-99-99')<(b.fecha||'9999-99-99')?-1:1);
   const rows=sorted.map(finRow).join("");
   const totalArs=list.reduce((s,p)=>s+(Number(p.importeArs)||0),0);
-  const totalUsd=list.reduce((s,p)=>s+(Number(p.importeArs)||0)*(Number(p.tc)||0),0);
+  const totalUsd=list.reduce((s,p)=>s+finUsd(p),0);
   const groupSeg=`<div class="seg"><button class="${state.finGroup==='dia'?'on':''}" data-act="finGroup" data-id="dia">Día</button><button class="${state.finGroup==='semana'?'on':''}" data-act="finGroup" data-id="semana">Semana</button><button class="${state.finGroup==='mes'?'on':''}" data-act="finGroup" data-id="mes">Mes</button></div>`;
   const totals=finTotals(list,state.finGroup);
   const totalRows=totals.map(t=>`<tr><td>${esc(t.label)}</td><td style="text-align:center">${t.n}</td><td style="text-align:right">$ ${money(t.ars)}</td><td style="text-align:right">US$ ${money(t.usd)}</td></tr>`).join("");
@@ -1915,7 +1916,7 @@ function sectionFinanzas(){
       <tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total ${filtActivo?'(filtrado)':'general'}</td><td style="text-align:center">${list.length}</td><td style="text-align:right">$ ${money(totalArs)}</td><td style="text-align:right">US$ ${money(totalUsd)}</td></tr>
       </tbody></table></div>
     </div>
-    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula multiplicando el importe en pesos por el tipo de cambio del día. Los conceptos se administran desde Configuración.</p>`;
+    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula dividiendo el importe en pesos por el tipo de cambio del día. Los conceptos se administran desde Configuración.</p>`;
 }
 
 /* ============================================================
