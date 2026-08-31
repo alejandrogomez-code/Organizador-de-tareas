@@ -1672,8 +1672,34 @@ async function loadCalidad(){
     const p=await sb.from("cal_procedimientos").select("*"); if(p.error) throw p.error;
     state.cal={hallazgos:h.data||[],mejoras:m.data||[],procedimientos:p.data||[]};
     state.calLoaded=true;
+    syncHallazgosToTasks(state.cal.hallazgos);
   }catch(e){ state.calError=(e&&e.message)||String(e); }
   state.calLoading=false; render();
+}
+/* ---------- Autocreación de tareas de Seguimiento a partir de hallazgos de Calidad ---------- */
+function hallazgoMarker(hid){ return "[[hallazgo:"+hid+"]]"; }
+function hallazgoTaskExists(hid){ const mk=hallazgoMarker(hid); return state.tasks.some(t=>t.detail&&t.detail.indexOf(mk)>=0); }
+function syncHallazgosToTasks(list){
+  // solo hallazgos abiertos o en tratamiento (mismo criterio que la exportación a PDF)
+  const abiertos=(list||[]).filter(r=>{ const s=(r.estado||"").toLowerCase(); return !/cerr|complet|finaliz|resuelt|descart|anul|cancel/.test(s); });
+  let creadas=0;
+  abiertos.forEach(r=>{
+    if(!r.id || hallazgoTaskExists(r.id)) return;
+    const sev=(r.severidad||"").toLowerCase(), est=(r.estado||"").toLowerCase();
+    const status = /alt|crit|may/.test(sev) ? "urg" : (/proc|curso|tratamiento/.test(est) ? "proc" : "sin");
+    const detail=[
+      hallazgoMarker(r.id),
+      "Hallazgo del Sistema de Calidad (creado automáticamente).",
+      r.area?("Área del hallazgo: "+r.area):"",
+      r.severidad?("Severidad: "+r.severidad):"",
+      r.estado?("Estado: "+r.estado):"",
+      r.fecha_deteccion?("Fecha de detección: "+fmt(r.fecha_deteccion)):""
+    ].filter(Boolean).join("\n");
+    const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Hallazgo: "+(r.resumen||"Sin resumen"),status,due:"",area:"Calidad",resp:r.responsable||"",obj:"",url:"",file:null,detail,recur:"",subs:[]};
+    state.tasks.unshift(t); saveTaskNow(t.id);
+    creadas++;
+  });
+  if(creadas>0){ toast(creadas===1?"Se creó 1 tarea nueva desde un hallazgo de Calidad.":("Se crearon "+creadas+" tareas nuevas desde hallazgos de Calidad.")); }
 }
 function sectionSGC(){
   if(state.calLoading) return `<div class="table-wrap"><div class="empty">Cargando datos de la app de Calidad…</div></div>`;
