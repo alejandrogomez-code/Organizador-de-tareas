@@ -590,7 +590,7 @@ function bloquesHTML(){
 function pickPanelHTML(){
   const b=getBloque(state.blockPick); if(!b)return"";
   const q=(state._blkQ||"").toLowerCase();
-  const inBlock=new Set(state.bloques.filter(x=>x.fecha===b.fecha).flatMap(x=>x.tareas));
+  const inBlock=new Set(state.bloques.flatMap(x=>x.tareas));
   let list=state.tasks.filter(t=>!inBlock.has(t.id)&&t.status!=='comp'&&t.status!=='desc');
   if(q) list=list.filter(t=>t.title.toLowerCase().includes(q)||(t.area||"").toLowerCase().includes(q));
   list=list.slice(0,40);
