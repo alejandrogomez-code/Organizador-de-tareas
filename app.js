@@ -69,6 +69,9 @@ const REPO_SECTIONS = ["admin","calidad"]; // secciones con pestaña Repositorio
 const VENC_TIPO = ["Impuesto","Contrato","Licencia","Seguro","Certificación","Servicio","Pago","Habilitación","Auditoría","Otro"];
 const PERIODICIDAD = [["unica","Única vez"],["mensual","Mensual"],["bimestral","Bimestral"],["trimestral","Trimestral"],["cuatrimestral","Cuatrimestral"],["semestral","Semestral"],["anual","Anual"]];
 const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
+const PAGO_ESTADOS = [{key:"pend",label:"Pendiente",cls:"st-sin"},{key:"proc",label:"En proceso",cls:"st-proc"},{key:"comp",label:"Completado",cls:"st-comp"}];
+const pagoEstMeta = k => PAGO_ESTADOS.find(s=>s.key===k) || PAGO_ESTADOS[0];
+const money = n => (Number(n)||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 
 /* ============================================================
    Estado
@@ -76,6 +79,7 @@ const perLabel = k => (PERIODICIDAD.find(p=>p[0]===k)||["","Única vez"])[1];
 const DEFAULTS = {
   areas:["Administración","Contabilidad","Finanzas","Marketing","Calidad","Logística","Compras","Sistemas","LEEX"],
   responsables:["Alejandro","Diego","Leandro","Claudio"],
+  finConceptos:["Sueldos","VEP Nacionalización","Comex Pago Exterior","Préstamo"],
   shortcuts:[{ic:"📅",label:"Notion Calendar",url:"#",section:"dashboard"},{ic:"✉️",label:"Correo",url:"#",section:"dashboard"},{ic:"🗂️",label:"Notion",url:"#",section:"dashboard"},{ic:"📊",label:"Odoo",url:"#",section:"dashboard"}],
   theme:"bosque",
 };
@@ -93,6 +97,7 @@ const state = {
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
   cal:{}, calLoaded:false, calLoading:false, calError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
+  finPagos:[], finConceptos:[], finFilters:{concepto:"",estado:"",desde:"",hasta:""}, finGroup:"semana",
 };
 
 /* ============================================================
@@ -122,6 +127,8 @@ function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
+function serFinPago(p){ return {id:p.id,user_id:UID,fecha:p.fecha||null,concepto:p.concepto||null,importe_ars:p.importeArs!=null&&p.importeArs!==""?Number(p.importeArs):null,tc:p.tc!=null&&p.tc!==""?Number(p.tc):null,estado:p.estado||"pend"}; }
+function deFinPago(r){ return {id:r.id,fecha:r.fecha||"",concepto:r.concepto||"",importeArs:r.importe_ars!=null?Number(r.importe_ars):0,tc:r.tc!=null?Number(r.tc):0,estado:r.estado||"pend"}; }
 function serReu(r){ return {id:r.id,user_id:UID,area:r.area||null,tipo:r.tipo||null,fecha:r.fecha||null,titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:r.compromisos||[],urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||null}; }
 function deReu(r){ return {id:r.id,area:r.area||"",tipo:r.tipo||"",fecha:r.fecha||"",titulo:r.titulo||"",participantes:r.participantes||"",temas:r.temas||"",decisiones:r.decisiones||"",pend:r.pend||"",compromisos:(r.compromisos||[]).map(c=>({t:c.t||"",done:!!c.done,taskId:c.taskId||null,resp:c.resp||"",due:c.due||""})),urls:r.urls||[],archivos:r.archivos||[],proxima:r.proxima||""}; }
 function serDoc(d){ return {id:d.id,user_id:UID,area:d.area||null,titulo:d.titulo||"",categoria:d.categoria||null,url:d.url||null,files:d.files||[],nota:d.nota||null,fecha:d.fecha||null}; }
@@ -140,11 +147,15 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers,finConceptos:state.finConceptos},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteVencDb(id){ if(!db())return; const {error}=await sb.from("vencimientos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+function getFinPago(id){ return state.finPagos.find(p=>p.id===id); }
+function scheduleSaveFinPago(id){ if(!db())return; clearTimeout(timers["fp"+id]); timers["fp"+id]=setTimeout(()=>saveFinPagoNow(id),500); }
+async function saveFinPagoNow(id){ if(!db())return; const p=getFinPago(id); if(!p)return; const {error}=await sb.from("fin_pagos").upsert(serFinPago(p)); if(error)toast("No se pudo guardar: "+error.message); }
+async function deleteFinPagoDb(id){ if(!db())return; const {error}=await sb.from("fin_pagos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function getReu(id){ return state.reuniones.find(r=>r.id===id); }
 function scheduleSaveReu(id){ if(!db())return; clearTimeout(timers["r"+id]); timers["r"+id]=setTimeout(()=>saveReuNow(id),500); }
 async function saveReuNow(id){ if(!db())return; const r=getReu(id); if(!r)return; const {error}=await sb.from("reuniones").upsert(serReu(r)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -183,8 +194,8 @@ async function loadAll(){
   // settings
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
-  if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; }
+  if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.finConceptos=[...DEFAULTS.finConceptos]; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; state.finConceptos=(st.prefs&&Array.isArray(st.prefs.finConceptos)&&st.prefs.finConceptos.length)?st.prefs.finConceptos:[...DEFAULTS.finConceptos]; }
   applyTheme(state.theme);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
@@ -199,6 +210,8 @@ async function loadAll(){
   // bloques del día
   { const {data,error}=await sb.from("bloques_dia").select("*").eq("user_id",UID).order("orden",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Bloques del día en Supabase."); state.bloques=(data||[]).map(deBloque); }
   { const {data,error}=await sb.from("eventos_cal").select("*").eq("user_id",UID); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración del Calendario (eventos_cal) en Supabase."); state.eventos=(data||[]).map(deEvento); }
+  // planificación financiera
+  { const {data,error}=await sb.from("fin_pagos").select("*").eq("user_id",UID).order("fecha",{ascending:true}); if(error&&/relation|does not exist/i.test(error.message))toast("Falta correr la migración de Planificación Financiera en Supabase."); state.finPagos=(data||[]).map(deFinPago); }
   state.seq = state.tasks.reduce((m,t)=>Math.max(m,t.n||0),0)+1;
 }
 
@@ -1087,13 +1100,15 @@ function sectionView(secId){
   const repoTab = REPO_SECTIONS.includes(secId) ? `<button class="${tab==='repo'?'on':''}" data-act="secTab" data-id="repo">📁 Repositorio</button>` : '';
   const sgcTab = secId==='calidad' ? `<button class="${tab==='sgc'?'on':''}" data-act="secTab" data-id="sgc">✦ Sistema de Calidad</button>` : '';
   const cierTab = secId==='admin' ? `<button class="${tab==='cierres'?'on':''}" data-act="secTab" data-id="cierres">$ Cierres contables</button>` : '';
-  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button>${repoTab}${sgcTab}${cierTab}</div>`;
+  const finTab = secId==='admin' ? `<button class="${tab==='fin'?'on':''}" data-act="secTab" data-id="fin">💰 Planificación Financiera</button>` : '';
+  const tabs=`<div class="seg"><button class="${tab==='tareas'?'on':''}" data-act="secTab" data-id="tareas">☑ Tareas del área</button><button class="${tab==='venc'?'on':''}" data-act="secTab" data-id="venc">⏰ Vencimientos</button><button class="${tab==='reu'?'on':''}" data-act="secTab" data-id="reu">🗓 Reuniones</button>${repoTab}${sgcTab}${cierTab}${finTab}</div>`;
   let body;
   if(tab==='venc') body=sectionVenc(secId);
   else if(tab==='reu') body=sectionReuniones(secId);
   else if(tab==='repo' && REPO_SECTIONS.includes(secId)) body=sectionRepo(secId);
   else if(tab==='sgc' && secId==='calidad') body=sectionSGC();
   else if(tab==='cierres' && secId==='admin') body=sectionCierres();
+  else if(tab==='fin' && secId==='admin') body=sectionFinanzas();
   else body=sectionTasks(secId);
   return `${sectionShortcuts(secId)}<div class="toolbar">${tabs}</div>${body}`;
 }
@@ -1815,6 +1830,86 @@ function sectionCierres(){
       <div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr><th>Tarea</th><th>Estado</th><th>Fecha estimada</th><th>Finalizada</th><th>Observaciones</th></tr></thead><tbody>${tRows||`<tr><td colspan="5"><div class="empty" style="padding:22px">Este cierre no tiene tareas.</div></td></tr>`}</tbody></table></div></div>`;
 }
 
+/* ---------- Planificación Financiera ---------- */
+function addFinPago(){ const p={id:crypto.randomUUID(),fecha:today(),concepto:(state.finConceptos&&state.finConceptos[0])||"",importeArs:0,tc:0,estado:"pend"}; state.finPagos.unshift(p); saveFinPagoNow(p.id); render(); }
+function delFinPago(id){ state.finPagos=state.finPagos.filter(p=>p.id!==id); deleteFinPagoDb(id); render(); }
+function finFiltered(){
+  const f=state.finFilters;
+  return state.finPagos.filter(p=>{
+    if(f.concepto&&p.concepto!==f.concepto)return false;
+    if(f.estado&&p.estado!==f.estado)return false;
+    if(f.desde&&(!p.fecha||p.fecha<f.desde))return false;
+    if(f.hasta&&(!p.fecha||p.fecha>f.hasta))return false;
+    return true;
+  });
+}
+function finGroupInfo(fecha,mode){
+  if(!fecha) return {key:"zzz-sin",label:"Sin fecha"};
+  if(mode==='mes'){ const ym=fecha.slice(0,7); const[y,m]=ym.split("-"); return {key:ym,label:Cap(MESES[+m-1])+" "+y}; }
+  if(mode==='semana'){ const ws=weekStart(new Date(fecha+"T00:00")); const we=new Date(ws); we.setDate(we.getDate()+6); const key=ymd(ws); const label="Semana del "+ws.getDate()+" al "+we.getDate()+" "+Cap(MESES[we.getMonth()]).slice(0,3); return {key,label}; }
+  const d=new Date(fecha+"T00:00"); return {key:fecha,label:Cap(DIAS[(d.getDay()+6)%7])+" "+d.getDate()+" "+Cap(MESES[d.getMonth()]).slice(0,3)};
+}
+function finTotals(list,mode){
+  const map=new Map();
+  list.forEach(p=>{
+    const g=finGroupInfo(p.fecha,mode);
+    if(!map.has(g.key))map.set(g.key,{key:g.key,label:g.label,ars:0,usd:0,n:0});
+    const e=map.get(g.key);
+    e.ars+=Number(p.importeArs)||0; e.usd+=(Number(p.importeArs)||0)*(Number(p.tc)||0); e.n++;
+  });
+  return [...map.values()].sort((a,b)=>a.key<b.key?-1:1);
+}
+function finRow(p){
+  const st=pagoEstMeta(p.estado);
+  const usd=(Number(p.importeArs)||0)*(Number(p.tc)||0);
+  return `<tr>
+    <td><input type="date" class="cell-edit" value="${esc(p.fecha)}" data-act="finF" data-id="${p.id}" data-f="fecha"></td>
+    <td><select class="cell-edit" data-act="finF" data-id="${p.id}" data-f="concepto">${optionList(state.finConceptos,p.concepto,"— Elegir —")}</select></td>
+    <td><input type="number" step="0.01" class="cell-edit" style="text-align:right" value="${p.importeArs||''}" placeholder="0" data-act="finF" data-id="${p.id}" data-f="importeArs"></td>
+    <td><input type="number" step="0.0001" class="cell-edit" style="text-align:right" value="${p.tc||''}" placeholder="0" data-act="finF" data-id="${p.id}" data-f="tc"></td>
+    <td style="text-align:right;white-space:nowrap">US$ ${money(usd)}</td>
+    <td style="text-align:center"><select class="status-pill ${st.cls}" data-act="finF" data-id="${p.id}" data-f="estado">${PAGO_ESTADOS.map(s=>`<option value="${s.key}" ${s.key===p.estado?'selected':''}>${s.label}</option>`).join("")}</select></td>
+    <td style="text-align:center"><button class="row-del" data-act="finDel" data-id="${p.id}">🗑</button></td>
+  </tr>`;
+}
+function sectionFinanzas(){
+  const f=state.finFilters;
+  const list=finFiltered();
+  const sorted=[...list].sort((a,b)=>(a.fecha||'9999-99-99')<(b.fecha||'9999-99-99')?-1:1);
+  const rows=sorted.map(finRow).join("");
+  const totalArs=list.reduce((s,p)=>s+(Number(p.importeArs)||0),0);
+  const totalUsd=list.reduce((s,p)=>s+(Number(p.importeArs)||0)*(Number(p.tc)||0),0);
+  const groupSeg=`<div class="seg"><button class="${state.finGroup==='dia'?'on':''}" data-act="finGroup" data-id="dia">Día</button><button class="${state.finGroup==='semana'?'on':''}" data-act="finGroup" data-id="semana">Semana</button><button class="${state.finGroup==='mes'?'on':''}" data-act="finGroup" data-id="mes">Mes</button></div>`;
+  const totals=finTotals(list,state.finGroup);
+  const totalRows=totals.map(t=>`<tr><td>${esc(t.label)}</td><td style="text-align:center">${t.n}</td><td style="text-align:right">$ ${money(t.ars)}</td><td style="text-align:right">US$ ${money(t.usd)}</td></tr>`).join("");
+  const filtActivo=f.concepto||f.estado||f.desde||f.hasta;
+  return `<div style="display:flex;gap:10px;align-items:center;margin-bottom:13px;flex-wrap:wrap">
+      <div class="filters">
+        <select class="inp" data-act="finFilter" data-id="concepto">${optionList(state.finConceptos,f.concepto,"Todos los conceptos")}</select>
+        <select class="inp" data-act="finFilter" data-id="estado"><option value="">Todos los estados</option>${PAGO_ESTADOS.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
+        <input type="date" class="inp" style="width:auto" title="Desde" value="${esc(f.desde)}" data-act="finFilter" data-id="desde">
+        <input type="date" class="inp" style="width:auto" title="Hasta" value="${esc(f.hasta)}" data-act="finFilter" data-id="hasta">
+        ${filtActivo?'<button class="btn-ghost" data-act="finFilterClear">✕ Limpiar filtros</button>':''}
+      </div>
+      <div class="spacer"></div>
+      <button class="btn-primary" data-act="finAdd">＋ Nuevo pago</button>
+    </div>
+    <div class="table-wrap"><table class="tasks" style="min-width:860px"><thead><tr><th>Fecha de pago</th><th>Concepto</th><th>Importe $ (ARS)</th><th>T.C.</th><th>Importe US$</th><th style="text-align:center">Estado</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7"><div class="empty">Sin pagos cargados. Agregá sueldos, VEP, pagos al exterior, préstamos…</div></td></tr>'}</tbody></table></div>
+    <div class="scard" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em;margin:0">Totales</h3>
+        <div style="flex:1"></div>
+        ${groupSeg}
+      </div>
+      <div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:520px"><thead><tr><th>Período</th><th style="text-align:center">Pagos</th><th style="text-align:right">Total $ (ARS)</th><th style="text-align:right">Total US$</th></tr></thead>
+      <tbody>${totalRows||'<tr><td colspan="4"><div class="empty" style="padding:18px">Sin datos para totalizar.</div></td></tr>'}
+      <tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total ${filtActivo?'(filtrado)':'general'}</td><td style="text-align:center">${list.length}</td><td style="text-align:right">$ ${money(totalArs)}</td><td style="text-align:right">US$ ${money(totalUsd)}</td></tr>
+      </tbody></table></div>
+    </div>
+    <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula multiplicando el importe en pesos por el tipo de cambio cargado en cada fila. Los conceptos se administran desde Configuración.</p>`;
+}
+
 /* ============================================================
    CONFIG
    ============================================================ */
@@ -1828,6 +1923,7 @@ function viewConfig(){
     <div class="cfg-card"><h3>Áreas</h3><div class="chip-list">${chips(state.areas,'area')}</div><div class="cfg-add"><input id="cfgArea" placeholder="Nueva área…" data-act="cfgAddKey" data-ev="keydown" data-kind="area"><button data-act="cfgAdd" data-kind="area">＋</button></div></div>
     <div class="cfg-card"><h3>Responsables</h3><div class="chip-list">${chips(state.responsables,'resp')}</div><div class="cfg-add"><input id="cfgResp" placeholder="Nuevo responsable…" data-act="cfgAddKey" data-ev="keydown" data-kind="resp"><button data-act="cfgAdd" data-kind="resp">＋</button></div></div>
     <div class="cfg-card"><h3>Objetivos (tags)</h3><div class="chip-list">${objChips}</div><div class="cfg-add"><input id="cfgObjTag" placeholder="TAG" style="max-width:90px"><input id="cfgObjName" placeholder="Nombre del objetivo…"><button data-act="cfgAdd" data-kind="obj">＋</button></div></div>
+    <div class="cfg-card"><h3>Conceptos de pago (Planificación Financiera)</h3><div class="chip-list">${chips(state.finConceptos,'finConcepto')}</div><div class="cfg-add"><input id="cfgFinConcepto" placeholder="Nuevo concepto…" data-act="cfgAddKey" data-ev="keydown" data-kind="finConcepto"><button data-act="cfgAdd" data-kind="finConcepto">＋</button></div></div>
   </div>
   <div class="scard" style="margin-top:16px"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Paleta de colores</h3><div class="swatches">${sw}</div></div>
   <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Accesos directos</h3>
@@ -1900,6 +1996,12 @@ const ACTIONS = {
   vencToggle:(el)=>toggleVenc(el.dataset.id),
   vencDel:(el)=>{ const id=el.dataset.id; state.vencimientos=state.vencimientos.filter(v=>v.id!==id); deleteVencDb(id); render(); },
   vencFilter:(el)=>{ state.vencFilter[el.dataset.id]=el.value; render(); },
+  finAdd:()=>addFinPago(),
+  finDel:(el)=>delFinPago(el.dataset.id),
+  finF:(el)=>{ const p=getFinPago(el.dataset.id); if(!p)return; const f=el.dataset.f; p[f]=(f==='importeArs'||f==='tc')?(el.value===''?0:parseFloat(el.value)):el.value; scheduleSaveFinPago(p.id); render(); },
+  finFilter:(el)=>{ state.finFilters[el.dataset.id]=el.value; render(); },
+  finFilterClear:()=>{ state.finFilters={concepto:"",estado:"",desde:"",hasta:""}; render(); },
+  finGroup:(el)=>{ state.finGroup=el.dataset.id; render(); },
   reuNew:(el)=>addReunion(el.dataset.id),
   reuOpen:(el)=>{ state.reuSel=el.dataset.id; render(); },
   reuBack:()=>{ state.reuSel=null; render(); },
@@ -2010,12 +2112,14 @@ function cfgAdd(kind){
   if(kind==='area'){ const v=$("#cfgArea").value.trim(); if(v&&!state.areas.includes(v)){ state.areas.push(v); scheduleSaveSettings(); } }
   if(kind==='resp'){ const v=$("#cfgResp").value.trim(); if(v&&!state.responsables.includes(v)){ state.responsables.push(v); scheduleSaveSettings(); } }
   if(kind==='obj'){ const tag=$("#cfgObjTag").value.trim().toUpperCase(); const nm=$("#cfgObjName").value.trim(); if(tag&&nm){ const o=newObjetivo(tag,nm); state.objetivos.push(o); saveObjNow(o.id); } }
+  if(kind==='finConcepto'){ const v=$("#cfgFinConcepto").value.trim(); if(v&&!state.finConceptos.includes(v)){ state.finConceptos.push(v); scheduleSaveSettings(); } }
   render();
 }
 function cfgDel(kind,i){
   if(kind==='area'){ state.areas.splice(i,1); scheduleSaveSettings(); }
   if(kind==='resp'){ state.responsables.splice(i,1); scheduleSaveSettings(); }
   if(kind==='obj'){ const o=state.objetivos[i]; state.objetivos.splice(i,1); if(o)deleteObjDb(o.id); }
+  if(kind==='finConcepto'){ state.finConceptos.splice(i,1); scheduleSaveSettings(); }
   render();
 }
 
