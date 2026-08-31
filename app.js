@@ -73,6 +73,15 @@ const PAGO_ESTADOS = [{key:"pend",label:"Pendiente",cls:"st-sin"},{key:"proc",la
 const pagoEstMeta = k => PAGO_ESTADOS.find(s=>s.key===k) || PAGO_ESTADOS[0];
 const money = n => (Number(n)||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const finUsd = p => { const ars=Number(p&&p.importeArs)||0, tc=Number(p&&p.tc)||0; return tc?ars/tc:0; };
+function parseArsNumber(str){
+  if(str==null) return 0;
+  let s=String(str).trim().replace(/\$/g,"").replace(/\s/g,"");
+  if(!s) return 0;
+  if(s.includes(",")){ s=s.replace(/\./g,"").replace(",","."); }
+  else{ const parts=s.split("."); if(!(parts.length===2&&parts[1].length<=2)) s=s.replace(/\./g,""); }
+  const n=parseFloat(s);
+  return isNaN(n)?0:n;
+}
 
 /* ============================================================
    Estado
@@ -1868,7 +1877,7 @@ function finRow(p){
     <td><input type="date" class="cell-edit" value="${esc(p.fecha)}" data-act="finF" data-id="${p.id}" data-f="fecha"></td>
     <td><select class="cell-edit" data-act="finF" data-id="${p.id}" data-f="concepto">${optionList(state.finConceptos,p.concepto,"— Elegir —")}</select></td>
     <td><input class="cell-edit" style="min-width:160px" value="${esc(p.detalle)}" placeholder="Detalle…" data-act="finF" data-id="${p.id}" data-f="detalle"></td>
-    <td><input type="number" step="0.01" class="cell-edit" style="text-align:right" value="${p.importeArs||''}" placeholder="0" data-act="finF" data-id="${p.id}" data-f="importeArs"></td>
+    <td><input type="text" inputmode="decimal" class="cell-edit" style="text-align:right" value="${p.importeArs?('$ '+money(p.importeArs)):''}" placeholder="$ 0,00" data-act="finF" data-id="${p.id}" data-f="importeArs"></td>
     <td style="text-align:right;white-space:nowrap;color:var(--tx-dim)">${p.tc?money(p.tc):'—'}</td>
     <td style="text-align:right;white-space:nowrap">US$ ${money(usd)}</td>
     <td style="text-align:center"><select class="status-pill ${st.cls}" data-act="finF" data-id="${p.id}" data-f="estado">${PAGO_ESTADOS.map(s=>`<option value="${s.key}" ${s.key===p.estado?'selected':''}>${s.label}</option>`).join("")}</select></td>
@@ -1901,6 +1910,8 @@ function sectionFinanzas(){
         ${filtActivo?'<button class="btn-ghost" data-act="finFilterClear">✕ Limpiar filtros</button>':''}
       </div>
       <div class="spacer"></div>
+      <button class="btn-ghost" data-act="finExportXlsx" title="Descargar en Excel">⬇ Excel</button>
+      <button class="btn-ghost" data-act="finExportPdf" title="Descargar en PDF">⬇ PDF</button>
       <button class="btn-primary" data-act="finAdd">＋ Nuevo pago</button>
     </div>
     <div class="table-wrap"><table class="tasks" style="min-width:960px"><thead><tr><th>Fecha de pago</th><th>Concepto</th><th>Detalle</th><th>Importe $ (ARS)</th><th>T.C.</th><th>Importe US$</th><th style="text-align:center">Estado</th><th></th></tr></thead>
@@ -1917,6 +1928,98 @@ function sectionFinanzas(){
       </tbody></table></div>
     </div>
     <p style="color:var(--tx-faint);font-size:.8em;margin-top:10px">El importe en dólares se calcula dividiendo el importe en pesos por el tipo de cambio del día. Los conceptos se administran desde Configuración.</p>`;
+}
+function exportFinXlsx(){
+  const list=[...finFiltered()].sort((a,b)=>(a.fecha||'9999-99-99')<(b.fecha||'9999-99-99')?-1:1);
+  if(!list.length){ toast("No hay pagos para exportar."); return; }
+  const xesc=s=>(s||"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[c]));
+  const cellS=(v,style)=>`<Cell${style?` ss:StyleID="${style}"`:""}><Data ss:Type="String">${xesc(v)}</Data></Cell>`;
+  const cellN=(v,style)=>`<Cell${style?` ss:StyleID="${style}"`:""}><Data ss:Type="Number">${Number(v)||0}</Data></Cell>`;
+  const row=cells=>`<Row>${cells}</Row>`;
+  let rows="";
+  rows+=row(cellS("Planificación Financiera","sTitle"));
+  rows+=row("");
+  rows+=row(cellS("Fecha de pago","sHead")+cellS("Concepto","sHead")+cellS("Detalle","sHead")+cellS("Importe $ (ARS)","sHead")+cellS("T.C.","sHead")+cellS("Importe US$","sHead")+cellS("Estado","sHead"));
+  let totalArs=0,totalUsd=0;
+  list.forEach(p=>{
+    const usd=finUsd(p); totalArs+=Number(p.importeArs)||0; totalUsd+=usd;
+    rows+=row(cellS(p.fecha?fmt(p.fecha):"—")+cellS(p.concepto)+cellS(p.detalle)+cellN(p.importeArs)+cellN(p.tc)+cellN(usd.toFixed(2))+cellS(pagoEstMeta(p.estado).label));
+  });
+  rows+=row("");
+  rows+=row(cellS("Total","sHead")+cellS("")+cellS("")+cellN(totalArs.toFixed(2),"sHead")+cellS("","sHead")+cellN(totalUsd.toFixed(2),"sHead")+cellS(""));
+  rows+=row("");
+  const totals=finTotals(list,state.finGroup);
+  rows+=row(cellS("Totales por "+(state.finGroup==='dia'?'día':state.finGroup==='mes'?'mes':'semana'),"sTitle"));
+  rows+=row(cellS("Período","sHead")+cellS("Pagos","sHead")+cellS("Total $ (ARS)","sHead")+cellS("Total US$","sHead"));
+  totals.forEach(t=>{ rows+=row(cellS(t.label)+cellN(t.n)+cellN(t.ars.toFixed(2))+cellN(t.usd.toFixed(2))); });
+  const xml=`<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="14"/></Style>
+<Style ss:ID="sHead"><Font ss:Bold="1"/><Interior ss:Color="#ECEEFB" ss:Pattern="Solid"/></Style>
+</Styles>
+<Worksheet ss:Name="Planificación Financiera">
+<Table>
+<Column ss:Width="90"/><Column ss:Width="150"/><Column ss:Width="200"/><Column ss:Width="110"/><Column ss:Width="90"/><Column ss:Width="110"/><Column ss:Width="100"/>
+${rows}
+</Table>
+</Worksheet>
+</Workbook>`;
+  dlBlob(xml,"application/vnd.ms-excel","Planificacion_Financiera_"+today()+".xls");
+  toast("Excel descargado.");
+}
+function exportFinPdf(){
+  const list=[...finFiltered()].sort((a,b)=>(a.fecha||'9999-99-99')<(b.fecha||'9999-99-99')?-1:1);
+  if(!list.length){ toast("No hay pagos para exportar."); return; }
+  const e=esc;
+  let totalArs=0,totalUsd=0;
+  const rows=list.map(p=>{
+    const usd=finUsd(p); totalArs+=Number(p.importeArs)||0; totalUsd+=usd;
+    return `<tr>
+      <td class="nowrap">${p.fecha?e(fmt(p.fecha)):'—'}</td>
+      <td>${e(p.concepto||'—')}</td>
+      <td>${e(p.detalle||'')}</td>
+      <td class="num">$ ${money(p.importeArs)}</td>
+      <td class="num">${p.tc?money(p.tc):'—'}</td>
+      <td class="num">US$ ${money(usd)}</td>
+      <td class="nowrap">${e(pagoEstMeta(p.estado).label)}</td>
+    </tr>`;
+  }).join("");
+  const totals=finTotals(list,state.finGroup);
+  const totalRows=totals.map(t=>`<tr><td>${e(t.label)}</td><td class="num">${t.n}</td><td class="num">$ ${money(t.ars)}</td><td class="num">US$ ${money(t.usd)}</td></tr>`).join("");
+  const hoy=new Date().toLocaleDateString("es-AR",{day:"2-digit",month:"long",year:"numeric"});
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Planificación Financiera</title>
+<style>
+  *{box-sizing:border-box;} body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#1f2430;margin:28px;line-height:1.4;}
+  h1{font-size:19px;margin:0 0 2px;} h2{font-size:14px;margin:22px 0 8px;} .sub{color:#6b7280;font-size:12px;margin:0 0 18px;}
+  table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+  thead th{background:#eceefb;color:#1f2430;text-align:left;padding:7px 8px;border-bottom:2px solid #4c5bd4;font-size:10px;text-transform:uppercase;letter-spacing:.4px;}
+  tbody td{padding:7px 8px;border-bottom:1px solid #e4e7eb;vertical-align:top;}
+  tbody tr:nth-child(even){background:#fafbfc;}
+  .nowrap{white-space:nowrap;} .num{text-align:right;white-space:nowrap;}
+  tfoot td{font-weight:700;border-top:2px solid #4c5bd4;padding:7px 8px;}
+  tr{page-break-inside:avoid;}
+  @media print{body{margin:12mm;} @page{margin:11mm;}}
+</style></head><body>
+<h1>Planificación Financiera</h1>
+<p class="sub">${list.length} pago${list.length===1?'':'s'} · Generado el ${e(hoy)}</p>
+<table>
+  <thead><tr><th>Fecha</th><th>Concepto</th><th>Detalle</th><th>Importe $ (ARS)</th><th>T.C.</th><th>Importe US$</th><th>Estado</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="3">Total</td><td class="num">$ ${money(totalArs)}</td><td></td><td class="num">US$ ${money(totalUsd)}</td><td></td></tr></tfoot>
+</table>
+<h2>Totales por ${state.finGroup==='dia'?'día':state.finGroup==='mes'?'mes':'semana'}</h2>
+<table>
+  <thead><tr><th>Período</th><th>Pagos</th><th>Total $ (ARS)</th><th>Total US$</th></tr></thead>
+  <tbody>${totalRows}</tbody>
+</table>
+<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
+</body></html>`;
+  const w=window.open("","_blank");
+  if(!w){ toast("Permití las ventanas emergentes para exportar el PDF."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  toast("Se abrió la vista de impresión — elegí “Guardar como PDF”.");
 }
 
 /* ============================================================
@@ -2007,11 +2110,13 @@ const ACTIONS = {
   vencFilter:(el)=>{ state.vencFilter[el.dataset.id]=el.value; render(); },
   finAdd:()=>addFinPago(),
   finDel:(el)=>delFinPago(el.dataset.id),
-  finF:(el)=>{ const p=getFinPago(el.dataset.id); if(!p)return; const f=el.dataset.f; p[f]=(f==='importeArs'||f==='tc')?(el.value===''?0:parseFloat(el.value)):el.value; scheduleSaveFinPago(p.id); render(); },
+  finF:(el)=>{ const p=getFinPago(el.dataset.id); if(!p)return; const f=el.dataset.f; p[f]=(f==='importeArs'||f==='tc')?parseArsNumber(el.value):el.value; scheduleSaveFinPago(p.id); render(); },
   finFilter:(el)=>{ state.finFilters[el.dataset.id]=el.value; render(); },
   finFilterClear:()=>{ state.finFilters={concepto:"",estado:"",desde:"",hasta:"",q:""}; render(); },
   finGroup:(el)=>{ state.finGroup=el.dataset.id; render(); },
   finTCSet:(el)=>{ const v=el.value===''?0:parseFloat(el.value); state.finTC=isNaN(v)?0:v; state.finPagos.forEach(p=>{ p.tc=state.finTC; scheduleSaveFinPago(p.id); }); scheduleSaveSettings(); render(); },
+  finExportXlsx:()=>exportFinXlsx(),
+  finExportPdf:()=>exportFinPdf(),
   reuNew:(el)=>addReunion(el.dataset.id),
   reuOpen:(el)=>{ state.reuSel=el.dataset.id; render(); },
   reuBack:()=>{ state.reuSel=null; render(); },
