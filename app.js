@@ -590,7 +590,7 @@ function bloquesHTML(){
 function pickPanelHTML(){
   const b=getBloque(state.blockPick); if(!b)return"";
   const q=(state._blkQ||"").toLowerCase();
-  const inBlock=new Set(b.tareas);
+  const inBlock=new Set(state.bloques.filter(x=>x.fecha===b.fecha).flatMap(x=>x.tareas));
   let list=state.tasks.filter(t=>!inBlock.has(t.id)&&t.status!=='comp'&&t.status!=='desc');
   if(q) list=list.filter(t=>t.title.toLowerCase().includes(q)||(t.area||"").toLowerCase().includes(q));
   list=list.slice(0,40);
@@ -1696,7 +1696,7 @@ function syncHallazgosToTasks(list){
       r.fecha_deteccion?("Fecha de detección: "+fmt(r.fecha_deteccion)):""
     ].filter(Boolean).join("\n");
     const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Hallazgo: "+(r.resumen||"Sin resumen"),status,due:"",area:"Calidad",resp:r.responsable||"",obj:"",url:"",file:null,detail,recur:"",subs:[]};
-    state.tasks.unshift(t); saveTaskNow(t.id);
+    state.tasks.push(t); saveTaskNow(t.id);
     creadas++;
   });
   if(creadas>0){ toast(creadas===1?"Se creó 1 tarea nueva desde un hallazgo de Calidad.":("Se crearon "+creadas+" tareas nuevas desde hallazgos de Calidad.")); }
