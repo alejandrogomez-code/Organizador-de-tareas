@@ -53,7 +53,39 @@ const PALETTES = {
   arena:{ name:"Arena", vars:{"--bg":"#f6f3ee","--panel":"#fffdf9","--panel-2":"#f9f5ef","--hover":"#f8f4ed","--sidebar":"#34302a","--sidebar-2":"#403a32","--sidebar-tx":"#cbc2b4","--sidebar-tx-dim":"#8f8676","--line":"#e8e1d6","--line-2":"#f0ebe2","--tx":"#2c2820","--tx-dim":"#6b6457","--tx-faint":"#a59d8e","--accent":"#b06a3c","--accent-soft":"#f5e7da"} },
   pizarra:{ name:"Pizarra (oscuro)", vars:{"--bg":"#161a20","--panel":"#1e232b","--panel-2":"#242a33","--hover":"#232932","--sidebar":"#12151a","--sidebar-2":"#1c212a","--sidebar-tx":"#aeb6c2","--sidebar-tx-dim":"#6b7480","--line":"#2c333d","--line-2":"#262c35","--tx":"#e7eaef","--tx-dim":"#a6adb8","--tx-faint":"#7a828d","--accent":"#6f7ce6","--accent-soft":"#272d4a"} },
 };
-function applyTheme(key){ const p = PALETTES[key] || PALETTES.bosque; for(const[k,v] of Object.entries(p.vars)) document.documentElement.style.setProperty(k,v); state.theme = PALETTES[key]?key:"bosque"; }
+PALETTES.pizarra.vars = Object.assign(PALETTES.pizarra.vars,{
+  "--p-sin-fg":"#aeb6c2","--p-sin-bg":"#2b323c","--p-urg-fg":"#ff8a8f","--p-urg-bg":"#3d2529",
+  "--p-proc-fg":"#f0b849","--p-proc-bg":"#3a3122","--p-comp-fg":"#6ddba0","--p-comp-bg":"#1f3a2c",
+  "--p-desc-fg":"#98a0ab","--p-desc-bg":"#282e37"});
+const ALL_VARS = [...new Set(Object.values(PALETTES).flatMap(p=>Object.keys(p.vars)))];
+function applyTheme(key){
+  const p = PALETTES[key] || PALETTES.bosque;
+  ALL_VARS.forEach(k=>{ if(!(k in p.vars)) document.documentElement.style.removeProperty(k); });
+  for(const[k,v] of Object.entries(p.vars)) document.documentElement.style.setProperty(k,v);
+  state.theme = PALETTES[key]?key:"bosque";
+}
+const BACKGROUNDS = {
+  banda:{name:"Banda", hint:"Franja de color arriba"},
+  bruma:{name:"Bruma", hint:"Degradé suave en las esquinas"},
+  curvas:{name:"Curvas", hint:"Líneas finas tipo mapa"},
+  cuaderno:{name:"Cuaderno", hint:"Grilla de puntos"},
+  vidrio:{name:"Vidrio", hint:"Paneles translúcidos"},
+  plano:{name:"Plano", hint:"Fondo liso, sin textura"},
+};
+function applyBg(key){
+  state.bg = BACKGROUNDS[key] ? key : "banda";
+  document.body.classList.forEach(c=>{ if(c.startsWith("bg-")) document.body.classList.remove(c); });
+  if(state.bg!=="plano") document.body.classList.add("bg-"+state.bg);
+}
+function applyDensity(d){ state.density = d==="dense"?"dense":"normal"; document.body.classList.toggle("dense", state.density==="dense"); }
+/* colores estables por área y por responsable */
+const TAG_COLORS = ["#378ADD","#7F77DD","#1D9E75","#BA7517","#D4537E","#0C447C","#0f8a6e","#b06a3c","#7b4fd0","#c2353a"];
+function hashIdx(str,n){ let h=0; for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))>>>0; return h%n; }
+const tagColor = s => TAG_COLORS[hashIdx(s||"",TAG_COLORS.length)];
+const ICONS = {
+  link:`<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>`,
+  clip:`<svg viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8-8"/></svg>`,
+};
 
 /* ---------- Secciones operativas ---------- */
 // Qué áreas (de Seguimiento de Tareas) agrupa cada sección.
@@ -98,7 +130,7 @@ const state = {
   sort:{col:"due",dir:"asc"}, group:"", showDone:false,
   objSel:null, objReviewMonth:null, objFilterArea:"", justSavedReview:null,
   secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
-  areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque",
+  areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque", bg:"banda", density:"normal",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
   blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
@@ -170,7 +202,7 @@ function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); tim
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
 function scheduleSaveSettings(){ if(!db())return; clearTimeout(timers.settings); timers.settings=setTimeout(saveSettingsNow,500); }
-async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers,finConceptos:state.finConceptos,finTC:state.finTC},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
+async function saveSettingsNow(){ if(!db())return; const {error}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,prefs:{blkView:state.blkView,bg:state.bg,density:state.density,foros:state.foros,calUrls:state.calUrls,calLayers:state.calLayers,finConceptos:state.finConceptos,finTC:state.finTC},updated_at:new Date().toISOString()}); if(error){ if(/prefs/.test(error.message)){ const {error:e2}=await sb.from("settings").upsert({user_id:UID,areas:state.areas,responsables:state.responsables,shortcuts:state.shortcuts,theme:state.theme,updated_at:new Date().toISOString()}); if(e2)toast("No se pudo guardar config: "+e2.message); } else toast("No se pudo guardar config: "+error.message); } }
 function getVenc(id){ return state.vencimientos.find(v=>v.id===id); }
 function scheduleSaveVenc(id){ if(!db())return; clearTimeout(timers["v"+id]); timers["v"+id]=setTimeout(()=>saveVencNow(id),500); }
 async function saveVencNow(id){ if(!db())return; const v=getVenc(id); if(!v)return; const {error}=await sb.from("vencimientos").upsert(serVenc(v)); if(error)toast("No se pudo guardar: "+error.message); }
@@ -218,8 +250,8 @@ async function loadAll(){
   let st=null;
   { const {data}=await sb.from("settings").select("*").eq("user_id",UID).maybeSingle(); st=data; }
   if(!st){ state.areas=[...DEFAULTS.areas]; state.responsables=[...DEFAULTS.responsables]; state.finConceptos=[...DEFAULTS.finConceptos]; state.finTC=0; state.shortcuts=DEFAULTS.shortcuts.map(s=>({...s})); state.theme=DEFAULTS.theme; await saveSettingsNow(); }
-  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; state.finConceptos=(st.prefs&&Array.isArray(st.prefs.finConceptos)&&st.prefs.finConceptos.length)?st.prefs.finConceptos:[...DEFAULTS.finConceptos]; state.finTC=(st.prefs&&typeof st.prefs.finTC==='number')?st.prefs.finTC:0; }
-  applyTheme(state.theme);
+  else { state.areas=st.areas||[]; state.responsables=st.responsables||[]; state.shortcuts=st.shortcuts||[]; state.theme=st.theme||"bosque"; if(st.prefs&&st.prefs.blkView)state.blkView=st.prefs.blkView; if(st.prefs&&st.prefs.bg)state.bg=st.prefs.bg; if(st.prefs&&st.prefs.density)state.density=st.prefs.density; if(st.prefs&&Array.isArray(st.prefs.foros))state.foros=st.prefs.foros; if(st.prefs&&Array.isArray(st.prefs.calUrls))state.calUrls=st.prefs.calUrls; if(st.prefs&&st.prefs.calLayers)state.calLayers={...state.calLayers,...st.prefs.calLayers}; state.finConceptos=(st.prefs&&Array.isArray(st.prefs.finConceptos)&&st.prefs.finConceptos.length)?st.prefs.finConceptos:[...DEFAULTS.finConceptos]; state.finTC=(st.prefs&&typeof st.prefs.finTC==='number')?st.prefs.finTC:0; }
+  applyTheme(state.theme); applyBg(state.bg); applyDensity(state.density);
   // tasks
   { const {data}=await sb.from("tasks").select("*").eq("user_id",UID).order("n",{ascending:true}); state.tasks=(data||[]).map(deTask); }
   // objetivos
@@ -241,6 +273,14 @@ async function loadAll(){
 /* ============================================================
    Navegación / render raíz
    ============================================================ */
+function crumbSub(){
+  const h=$("#crumb"); if(!h)return;
+  const fecha=Cap(new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}));
+  let extra="";
+  const urg=state.tasks.filter(t=>isOpen(t)&&t.due&&t.due<=today()).length;
+  if(urg) extra=` · ${urg} tarea${urg===1?'':'s'} vencida${urg===1?'':'s'} o para hoy`;
+  h.insertAdjacentHTML("beforeend",`<small>${fecha}${extra}</small>`);
+}
 function renderNav(){
   $("#nav").innerHTML = SECTIONS.map(s=>`<a href="#" class="${state.view===s.id?'active':''}" data-go="${s.id}"><span class="ic">${s.ic}</span>${esc(s.label)}</a>`).join("")
     + `<div class="sep"></div><a href="#" class="${state.view==='config'?'active':''}" data-go="config"><span class="ic">⚙</span>Configuración</a>`;
@@ -254,7 +294,8 @@ function render(){
   const sec=SECTIONS.find(s=>s.id===state.view);
   if(state.view==='config') $("#crumb").innerHTML="Configuración";
   else if(state.view==='objetivos'){ const o=state.objSel?getObjById(state.objSel):null; $("#crumb").innerHTML=o?`<span class="crumb">Objetivos / </span>${esc(o.tag)}`:`<span class="crumb">Objetivos</span>`; }
-  else $("#crumb").innerHTML=`<span class="crumb">${esc(sec?sec.label:'')}</span>`;
+  else $("#crumb").innerHTML=`${esc(sec?sec.label:'')}`;
+  crumbSub();
   const c=$("#content");
   if(state.view==="dashboard") c.innerHTML=viewDashboard();
   else if(state.view==="tareas"){ c.innerHTML=viewTasks(); paintTasks(); }
@@ -348,7 +389,7 @@ function viewDashboard(){
   const hoyTxt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"});
   const hero=`<div class="dash-hero">
     <p class="dh-t">${saludo}</p>
-    <p class="dh-s"><span style="text-transform:capitalize">${esc(hoyTxt)}</span>${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> tarea${nUrg===1?'':'s'} urgente${nUrg===1?'':'s'}`:' · sin urgencias'}</p>
+    <p class="dh-s">${esc(Cap(hoyTxt))}${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> tarea${nUrg===1?'':'s'} urgente${nUrg===1?'':'s'}`:' · sin urgencias'}</p>
   </div>`;
   return `${hero}<div class="dash-top">
     <div class="widget">${meetingWidget}</div>
@@ -415,8 +456,11 @@ function viewTasks(){
       <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
     </div><div id="taskArea"></div>`;
   }
-  return `<div id="taskCards">${taskCards(true)}</div><div class="toolbar">
+  return `<div id="taskCards">${taskCards(true)}</div><div class="toolbar tb-tasks">
     ${seg}
+    <select class="inp tb-group" data-act="group"><option value="">Sin agrupar</option><option value="area" ${state.group==='area'?'selected':''}>Agrupar por área</option><option value="resp" ${state.group==='resp'?'selected':''}>Agrupar por responsable</option></select>
+    <button class="btn-ghost ${state.showDone?'on':''}" data-act="toggleDone">${state.showDone?'Ocultar':'Ver'} completadas</button>
+    <button class="btn-primary tb-new" data-act="addTask">＋ Nueva tarea</button>
     <div class="filters">
       <select data-act="filter" data-id="estado"><option value="">Todos los estados</option>${STATUSES.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
       <select data-act="filter" data-id="area">${optionList(state.areas,f.area,"Todas las áreas")}</select>
@@ -424,10 +468,7 @@ function viewTasks(){
       <select data-act="filter" data-id="venc"><option value="">Cualquier vencimiento</option><option value="over" ${f.venc==='over'?'selected':''}>Vencidas</option><option value="today" ${f.venc==='today'?'selected':''}>Vence hoy</option><option value="week" ${f.venc==='week'?'selected':''}>Esta semana</option><option value="none" ${f.venc==='none'?'selected':''}>Sin fecha</option></select>
       <input type="search" placeholder="Buscar tarea…" value="${esc(f.q)}" data-act="filter" data-id="q" data-input>
     </div>
-    <div class="spacer"></div>
-    <select class="inp" data-act="group"><option value="">Sin agrupar</option><option value="area" ${state.group==='area'?'selected':''}>Agrupar por área</option><option value="resp" ${state.group==='resp'?'selected':''}>Agrupar por responsable</option></select>
-    <button class="btn-ghost ${state.showDone?'on':''}" data-act="toggleDone">${state.showDone?'Ocultar':'Ver'} completadas</button>
-    <button class="btn-primary" data-act="addTask">＋ Nueva tarea</button>
+    </div>
   </div><div class="task-meta" id="taskMeta"></div><div id="taskArea"></div>`;
 }
 function taskCards(anim){
@@ -435,16 +476,20 @@ function taskCards(anim){
   const over=base.filter(t=>isOpen(t)&&t.due&&t.due<today()).length;
   const n=k=>base.filter(t=>t.status===k).length;
   const f=state.filters;
+  const opens=base.filter(isOpen);
+  const oldest=opens.filter(t=>t.due&&t.due<today()).sort((a,b)=>a.due.localeCompare(b.due))[0];
+  const week=opens.filter(t=>t.due&&t.due>=today()&&daysUntil(t.due)<=7).length;
+  const nodate=opens.filter(t=>!t.due).length;
   const defs=[
-    ["sc-over","Vencidas",over,"venc","over"],
-    ["sc-urg","Urgentes",n("urg"),"estado","urg"],
-    ["sc-proc","En proceso",n("proc"),"estado","proc"],
-    ["sc-sin","Sin iniciar",n("sin"),"estado","sin"],
-    ["sc-comp","Completadas",n("comp"),"estado","comp"],
+    ["sc-over","Vencidas",over,"venc","over", oldest?`La más atrasada, hace ${-daysUntil(oldest.due)} días`:"Ninguna atrasada"],
+    ["sc-urg","Urgentes",n("urg"),"estado","urg", "Marcadas como prioridad"],
+    ["sc-proc","En proceso",n("proc"),"estado","proc", week?`${week} vence${week===1?'':'n'} esta semana`:"Nada vence esta semana"],
+    ["sc-sin","Sin iniciar",n("sin"),"estado","sin", nodate?`${nodate} sin fecha de vencimiento`:"Todas con fecha"],
+    ["sc-comp","Completadas",n("comp"),"estado","comp", "Se ocultan con el botón Completadas"],
   ];
-  return `<div class="sumcards">${defs.map(([cls,label,num,key,val],i)=>{
+  return `<div class="sumcards">${defs.map(([cls,label,num,key,val,sub],i)=>{
     const on=f[key]===val;
-    return `<button class="sumcard sc-click ${cls} ${on?'on':''} ${!anim?'noanim':''}" data-act="cardFilter" data-k="${key}" data-v="${val}" aria-pressed="${on}" title="${on?'Quitar filtro':'Ver solo: '+label.toLowerCase()}" style="animation-delay:${i*60}ms"><span class="sc-label">${label}</span><span class="sc-num" ${anim?`data-count="${num}"`:''}>${anim?0:num}</span></button>`;
+    return `<button class="sumcard sc-click ${cls} ${on?'on':''} ${!anim?'noanim':''}" data-act="cardFilter" data-k="${key}" data-v="${val}" aria-pressed="${on}" title="${on?'Quitar filtro':'Ver solo: '+label.toLowerCase()}" style="animation-delay:${i*60}ms"><span class="sc-label">${label}</span><span class="sc-num" ${anim?`data-count="${num}"`:''}>${anim?0:num}</span><span class="sc-sub">${sub}</span></button>`;
   }).join("")}</div>`;
 }
 function taskMetaHTML(shown){
@@ -481,11 +526,18 @@ function paintTasks(){
   const list=filtered();
   refreshSumCards();
   const meta=$("#taskMeta");
-  if(state.taskView==='kanban'){ if(meta){ meta.innerHTML=taskMetaHTML(list.length); bindContentArea(meta); } if(!list.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas que coincidan con los filtros.</div></div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
+  if(state.taskView==='kanban'){ if(meta){ meta.innerHTML=taskMetaHTML(list.length); bindContentArea(meta); } if(!list.length){ area.innerHTML=`<div class="table-wrap">${emptyHTML()}</div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
   const tl=sortList(visibleTable(list));
   if(meta){ meta.innerHTML=taskMetaHTML(tl.length); bindContentArea(meta); }
-  if(!tl.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas para mostrar. ${!state.showDone?'Quizás estén completadas — probá "Ver completadas".':'Probá cambiar los filtros o creá una nueva.'}</div></div>`; return; }
+  if(!tl.length){ area.innerHTML=`<div class="table-wrap">${emptyHTML()}</div>`; return; }
   area.innerHTML=tableHTML(tl); bindTaskArea();
+}
+function emptyHTML(){
+  const f=state.filters, any=Object.values(f).some(v=>v);
+  if(f.venc==='over') return `<div class="empty-cta"><span class="big">✅</span><p>No tenés tareas vencidas.</p><button class="btn-ghost" data-act="clearFilters">Ver todas las tareas</button></div>`;
+  if(any) return `<div class="empty-cta"><span class="big">🔍</span><p>Ninguna tarea coincide con estos filtros.</p><button class="btn-ghost" data-act="clearFilters">Limpiar filtros</button></div>`;
+  if(!state.showDone&&state.tasks.length) return `<div class="empty-cta"><span class="big">🎉</span><p>No queda nada pendiente.</p><button class="btn-ghost" data-act="toggleDone">Ver completadas</button></div>`;
+  return `<div class="empty-cta"><span class="big">☑</span><p>Todavía no cargaste ninguna tarea.</p><button class="btn-primary" data-act="addTask">＋ Crear la primera</button></div>`;
 }
 function bindTaskArea(){
   const area=$("#taskArea"); if(!area)return;
@@ -496,20 +548,25 @@ function bindTaskArea(){
   });
 }
 function th(col,label){ const s=state.sort,on=s.col===col,arr=on?(s.dir==='asc'?'▲':'▼'):'↕'; return `<th class="sortable" data-act="sort" data-id="${col}">${label}<span class="arr" style="opacity:${on?1:.35}">${arr}</span></th>`; }
+function pickCell(t,field,view,opts){
+  return `<div class="cell-pick">${view}<select data-act="setF" data-id="${t.id}" data-f="${field}" aria-label="${field==='area'?'Área':'Responsable'}">${opts}</select></div>`;
+}
 function rowHTML(t){
   const st=stMeta(t.status); const done=t.subs.filter(s=>s.d).length,tot=t.subs.length,pct=tot?Math.round(done/tot*100):0;
   const sp=tot?`<span class="subprog" title="${done} de ${tot} subtareas"><span class="bar"><i style="width:${pct}%"></i></span>${done}/${tot}</span>`:"";
   const rec=t.recur?`<span class="recur-badge" title="Se repite: ${recurLabel(t.recur)}">↻</span>`:"";
   const nf=(t.files||[]).length;
-  const links=(t.url?`<a class="icon-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="${esc(t.url)}">🔗</a>`:"")+(nf?`<span class="attach-mini" title="${nf} archivo(s)">📎${nf>1?nf:''}</span>`:"");
-  const open=isOpen(t), b=dueBucket(t), rel=dueRel(t);
-  const rowCls=!open?'row-closed':b===0?'row-over':b===1?'row-today':'';
+  const links=(t.url?`<a class="icon-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="${esc(t.url)}">${ICONS.link}</a>`:"")+(nf?`<span class="attach-mini" title="${nf} archivo(s)">${ICONS.clip}${nf>1?' '+nf:''}</span>`:"");
+  const areaView=t.area?`<span class="cv area-chip"><i style="background:${tagColor(t.area)}"></i>${esc(t.area)}</span>`:`<span class="cv none">Sin área</span>`;
+  const respView=t.resp?`<span class="cv resp-cell"><b style="background:${tagColor(t.resp)}">${esc((t.resp[0]||"?").toUpperCase())}</b>${esc(t.resp)}</span>`:`<span class="cv none">Sin asignar</span>`;
+  const op=isOpen(t), bkt=dueBucket(t), rel=dueRel(t);
+  const rowCls=!op?'row-closed':bkt===0?'row-over':bkt===1?'row-today':'';
   return `<tr class="${rowCls}"><td class="num">${t.n}</td>
     <td><div class="title-wrap"><button class="task-title" data-act="open" data-id="${t.id}">${esc(t.title)}${rec}</button>${sp}</div></td>
-    <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status" aria-label="Estado">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select></td>
-    <td class="due-cell ${open?dueClass(t.due):''}"><input type="date" class="due-inp ${t.due?'':'is-empty'}" value="${esc(t.due||'')}" data-act="setF" data-id="${t.id}" data-f="due" aria-label="Vencimiento">${rel?`<span class="due-rel">${rel}</span>`:''}</td>
-    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="area" aria-label="Área">${optionList(state.areas,t.area,"—")}</select></td>
-    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="resp" aria-label="Responsable">${optionList(state.responsables,t.resp,"—")}</select></td>
+    <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status" aria-label="Estado">${STATUSES.map(x=>`<option value="${x.key}" ${x.key===t.status?'selected':''}>${x.label}</option>`).join("")}</select></td>
+    <td class="due-cell ${op?dueClass(t.due):''}"><div class="due-pick"><button class="due-txt ${t.due?'':'is-empty'}" data-act="duePick" data-id="${t.id}" title="Cambiar el vencimiento">${t.due?fmt(t.due):'Sin fecha'}</button><input type="date" class="due-h" id="due_${t.id}" value="${esc(t.due||'')}" data-act="setF" data-id="${t.id}" data-f="due" aria-label="Vencimiento" tabindex="-1">${rel?`<span class="due-rel">${rel}</span>`:''}</div></td>
+    <td>${pickCell(t,'area',areaView,optionList(state.areas,t.area,"— sin área —"))}</td>
+    <td>${pickCell(t,'resp',respView,optionList(state.responsables,t.resp,"— sin asignar —"))}</td>
     <td class="date dim">${fmt(t.created)}</td>
     <td class="links">${links||'<span class="none">—</span>'}</td></tr>`;
 }
@@ -2082,6 +2139,13 @@ function viewConfig(){
   const objChips=state.objetivos.map((o,i)=>`<span class="chip">${esc(o.tag)} · ${esc(o.name)}<button data-act="cfgDel" data-kind="obj" data-i="${i}">✕</button></span>`).join("");
   const scSecOpts=(sel)=>{ const all=[["dashboard","Dashboard"]].concat(SECTIONS.filter(s=>s.id!=="dashboard").map(s=>[s.id,s.label])); return all.map(([v,l])=>`<option value="${v}" ${ (sel||"dashboard")===v?'selected':''}>${esc(l)}</option>`).join(""); };
   const scRows=state.shortcuts.map((s,i)=>`<div class="sc-edit"><input class="inp" style="width:46px;text-align:center" value="${esc(s.ic)}" data-act="scF" data-i="${i}" data-f="ic"><input class="inp" style="flex:0 0 140px" value="${esc(s.label)}" data-act="scF" data-i="${i}" data-f="label" placeholder="Nombre"><input class="inp" style="flex:1;min-width:120px" value="${esc(s.url)}" data-act="scF" data-i="${i}" data-f="url" placeholder="https://…"><select class="inp" style="flex:0 0 150px" data-act="scF" data-i="${i}" data-f="section">${scSecOpts(s.section)}</select><button class="row-del" data-act="scDel" data-i="${i}">🗑</button></div>`).join("");
+  const bgPrev={ banda:`<i style="background:var(--sidebar)"></i><i style="background:var(--bg)"></i><i style="background:var(--panel)"></i><i style="background:var(--panel)"></i>`,
+    bruma:`<i style="background:color-mix(in srgb,var(--accent) 30%,var(--bg))"></i><i style="background:color-mix(in srgb,var(--accent) 12%,var(--bg))"></i><i style="background:var(--bg)"></i><i style="background:var(--panel)"></i>`,
+    curvas:`<i style="background:var(--bg)"></i><i style="background:color-mix(in srgb,var(--tx) 10%,var(--bg))"></i><i style="background:var(--bg)"></i><i style="background:var(--panel)"></i>`,
+    cuaderno:`<i style="background:var(--bg)"></i><i style="background:color-mix(in srgb,var(--tx) 16%,var(--bg))"></i><i style="background:var(--bg)"></i><i style="background:var(--panel)"></i>`,
+    vidrio:`<i style="background:color-mix(in srgb,var(--accent) 45%,var(--bg))"></i><i style="background:color-mix(in srgb,#7F77DD 35%,var(--bg))"></i><i style="background:color-mix(in srgb,#EF9F27 25%,var(--bg))"></i><i style="background:var(--panel)"></i>`,
+    plano:`<i style="background:var(--bg)"></i><i style="background:var(--bg)"></i><i style="background:var(--panel)"></i><i style="background:var(--panel)"></i>` };
+  const bgSw=Object.entries(BACKGROUNDS).map(([k,b])=>`<button class="swatch ${state.bg===k?'on':''}" data-act="bg" data-k="${k}" title="${b.hint}"><div class="prev">${bgPrev[k]}</div><div class="nm">${b.name}</div></button>`).join("");
   const sw=Object.entries(PALETTES).map(([k,p])=>`<button class="swatch ${state.theme===k?'on':''}" data-act="theme" data-k="${k}"><div class="prev"><i style="background:${p.vars['--sidebar']}"></i><i style="background:${p.vars['--accent']}"></i><i style="background:${p.vars['--bg']}"></i><i style="background:${p.vars['--panel']}"></i></div><div class="nm">${p.name}</div></button>`).join("");
   return `<div class="cfg-grid">
     <div class="cfg-card"><h3>Áreas</h3><div class="chip-list">${chips(state.areas,'area')}</div><div class="cfg-add"><input id="cfgArea" placeholder="Nueva área…" data-act="cfgAddKey" data-ev="keydown" data-kind="area"><button data-act="cfgAdd" data-kind="area">＋</button></div></div>
@@ -2090,6 +2154,15 @@ function viewConfig(){
     <div class="cfg-card"><h3>Conceptos de pago (Planificación Financiera)</h3><div class="chip-list">${chips(state.finConceptos,'finConcepto')}</div><div class="cfg-add"><input id="cfgFinConcepto" placeholder="Nuevo concepto…" data-act="cfgAddKey" data-ev="keydown" data-kind="finConcepto"><button data-act="cfgAdd" data-kind="finConcepto">＋</button></div></div>
   </div>
   <div class="scard" style="margin-top:16px"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Paleta de colores</h3><div class="swatches">${sw}</div></div>
+  <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Fondo de la app</h3>
+    <div class="swatches">${bgSw}</div>
+    <h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0;margin-top:16px">Densidad de las tablas</h3>
+    <div class="seg" style="width:max-content">
+      <button class="${state.density!=='dense'?'on':''}" data-act="density" data-k="normal">Cómoda</button>
+      <button class="${state.density==='dense'?'on':''}" data-act="density" data-k="dense">Compacta</button>
+    </div>
+    <p style="color:var(--tx-faint);font-size:.82em;margin:10px 0 0">La densidad compacta muestra más filas en pantalla y oculta el texto "vence en X días".</p>
+  </div>
   <div class="scard"><h3 style="font-size:.92em;color:var(--tx);text-transform:none;letter-spacing:0">Accesos directos</h3>
     ${scRows||'<p style="color:var(--tx-faint);font-size:.86em">Sin accesos directos.</p>'}
     <button class="btn-ghost add-row" data-act="scAdd">＋ Agregar acceso directo</button>
@@ -2118,6 +2191,9 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  duePick:(el)=>{ const i=document.getElementById("due_"+el.dataset.id); if(!i)return; try{ i.showPicker(); }catch(e){ i.style.position="static"; i.style.opacity=1; i.style.width="auto"; i.style.height="auto"; i.style.pointerEvents="auto"; i.focus(); } },
+  bg:(el)=>{ applyBg(el.dataset.k); scheduleSaveSettings(); render(); },
+  density:(el)=>{ applyDensity(el.dataset.k); scheduleSaveSettings(); render(); },
   cardFilter:(el)=>{ const k=el.dataset.k,v=el.dataset.v,f=state.filters; const on=f[k]===v; f.estado="";f.venc=""; if(!on)f[k]=v; syncFilterSelects(); paintTasks(); },
   clearFilters:()=>{ state.filters={estado:"",area:"",resp:"",venc:"",q:""}; render(); },
   filter:(el)=>{ state.filters[el.dataset.id]=el.value; paintTasks(); },
@@ -2339,7 +2415,7 @@ function setupShell(){
 }
 
 /* init */
-applyTheme("bosque");
+applyTheme("bosque"); applyBg("banda");
 setupAuthUI();
 setupShell();
 if(!CONFIGURED){
