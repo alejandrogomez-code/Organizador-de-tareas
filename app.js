@@ -133,7 +133,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque", bg:"banda", density:"normal",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
-  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null,
+  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false,
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
@@ -433,11 +433,15 @@ function animateCounters(root){
 }
 function viewTasks(){
   const f=state.filters;
-  const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button><button class="${state.taskView==='matriz'?'on':''}" data-act="taskView" data-id="matriz">▦ Matriz</button></div>`;
-  if(state.taskView==='matriz'){
+  const seg=`<div class="seg"><button class="${state.taskView==='tabla'?'on':''}" data-act="taskView" data-id="tabla">▤ Tabla</button><button class="${state.taskView==='kanban'?'on':''}" data-act="taskView" data-id="kanban">▥ Kanban</button><button class="${state.taskView==='bloques'?'on':''}" data-act="taskView" data-id="bloques">🗓 Bloques del día</button><button class="${state.taskView==='semana'?'on':''}" data-act="taskView" data-id="semana">▦ Semana</button></div>`;
+  if(state.taskView==='semana'){
+    if(!state.weekRef) state.weekRef=today();
     return `<div class="toolbar">${seg}
       <div class="spacer"></div>
-      <span style="font-size:.82em;color:var(--tx-dim)">Arrastrá cada tarea al cuadrante que le corresponde</span>
+      <button class="btn-ghost" data-act="wkNav" data-id="prev" title="Semana anterior">‹</button>
+      <span style="font-size:.9em;font-weight:600;min-width:150px;text-align:center">${esc(weekLabel())}</span>
+      <button class="btn-ghost" data-act="wkNav" data-id="next" title="Semana siguiente">›</button>
+      <button class="btn-ghost" data-act="wkNav" data-id="today">Esta semana</button>
     </div><div id="taskArea"></div>`;
   }
   if(state.taskView==='bloques'){
@@ -450,10 +454,10 @@ function viewTasks(){
       <input type="date" class="inp" value="${state.blocksDate}" data-act="blkDate" style="width:auto">
       <button class="btn-ghost" data-act="blkDay" data-id="next" title="Día siguiente">›</button>
       <button class="btn-ghost" data-act="blkDay" data-id="today">Hoy</button>
-      <button class="btn-ghost" data-act="blkClose" title="Repasar el día y pasar lo pendiente al día siguiente">✓ Cierre del día</button>
+      ${dayLocked(state.blocksDate)?'':`<button class="btn-ghost" data-act="blkClose" title="Repasar el día y pasar lo pendiente al día siguiente">✓ Cierre del día</button>`}
       <button class="btn-ghost" data-act="blkExportXlsx" title="Descargar el día en Excel">⬇ Excel</button>
       <button class="btn-ghost" data-act="blkExportPdf" title="Descargar el día en PDF">⬇ PDF</button>
-      <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
+      ${dayLocked(state.blocksDate)?'':`<button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>`}
     </div><div id="taskArea"></div>`;
   }
   return `<div id="taskCards">${taskCards(true)}</div><div class="toolbar tb-tasks">
@@ -522,7 +526,7 @@ function sortList(list){
 function paintTasks(){
   const area=$("#taskArea"); if(!area)return;
   if(state.taskView==='bloques'){ area.innerHTML=bloquesHTML(); bindTaskArea(); wireBloques(); return; }
-  if(state.taskView==='matriz'){ area.innerHTML=matrizHTML(); bindTaskArea(); wireMatriz(); return; }
+  if(state.taskView==='semana'){ area.innerHTML=semanaHTML(); bindTaskArea(); wireSemana(); return; }
   const list=filtered();
   refreshSumCards();
   const meta=$("#taskMeta");
@@ -619,11 +623,16 @@ function blocksOverlap(list){
 function blkTaskRow(b,id){
   const t=taskById(id);
   if(!t) return `<div class="blk-task" style="opacity:.6"><span style="flex:1;font-size:.86em;color:var(--tx-faint)">Tarea eliminada</span><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${id}" style="opacity:1">🗑</button></div>`;
-  const st=stMeta(t.status);
-  return `<div class="blk-task"><button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left">${esc(t.title)}</button>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim);margin-right:2px">${esc(t.area)}</span>`:''}<select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select><button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${t.id}" title="Quitar del bloque" style="opacity:1">✕</button></div>`;
+  const st=stMeta(t.status); const locked=dayLocked(b.fecha); const pp=postponed(t);
+  const chk=locked?'':`<input type="checkbox" class="blk-chk" data-act="blkDone" data-id="${t.id}" ${t.status==='comp'?'checked':''} title="Marcar como completada">`;
+  return `<div class="blk-task ${t.status==='comp'?'is-done':''}">${chk}<button class="task-title" data-act="open" data-id="${t.id}" style="flex:1;text-align:left">${esc(t.title)}</button>${pp>1?`<span class="wk-pp" title="Ya se planificó ${pp} días y quedó pendiente">↺ ${pp}</span>`:''}${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim);margin-right:2px">${esc(t.area)}</span>`:''}<select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status" ${locked?'disabled':''}>${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select>${locked?'':`<button class="del" data-act="blkTaskDel" data-b="${b.id}" data-t="${t.id}" title="Quitar del bloque" style="opacity:1">✕</button>`}</div>`;
 }
 function blkHeadHTML(b,over){
   const dur=durLabel(b.inicio,b.fin);
+  if(dayLocked(b.fecha)) return `<div class="blk-head">
+    <span class="blk-name-ro">${esc(b.nombre||'Bloque')}</span>
+    <span class="blk-time">${b.inicio||b.fin?`${esc(b.inicio||'—')} – ${esc(b.fin||'—')}`:'sin horario'}${dur?`<span class="blk-dur">${dur}</span>`:''}</span>
+  </div>`;
   return `<div class="blk-head">
     <input class="blk-name" value="${esc(b.nombre)}" placeholder="Nombre del bloque" data-act="blkF" data-id="${b.id}" data-f="nombre" data-input>
     <span class="blk-time">
@@ -640,7 +649,7 @@ function blkAgenda(list,overlap){
     return `<div class="blk-card" style="border-left-color:${blkColor(i)}">
       ${blkHeadHTML(b,overlap.has(b.id))}
       <div class="blk-tasks">${rows||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div>
-      <button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea desde el seguimiento</button>
+      ${dayLocked(b.fecha)?'':`<button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea desde el seguimiento</button>`}
     </div>`;
   }).join("")}</div>`;
 }
@@ -651,7 +660,7 @@ function blkCompacta(list,overlap){
     const nUrg=b.tareas.filter(id=>{ const t=taskById(id); return t&&t.status==='urg'; }).length;
     const rangeTxt=(b.inicio||b.fin)?`${b.inicio||'—'}–${b.fin||'—'}`:'sin horario';
     const badge=nUrg?`<span class="blk-warn" style="font-size:.82em">${nUrg} urg</span>`:`<span style="font-size:.82em;color:var(--tx-faint)">${b.tareas.length} tarea${b.tareas.length===1?'':'s'}</span>`;
-    const body=open?`<div class="blk-comp-body">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}<button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button></div>`:'';
+    const body=open?`<div class="blk-comp-body">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}${dayLocked(b.fecha)?'':`<button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button>`}</div>`:'';
     return `<div class="blk-comp-item" style="border-left-color:${blkColor(i)}">
       <div class="blk-comp-head" data-act="blkToggle" data-id="${b.id}">
         <span class="chev">${open?'▾':'▸'}</span>
@@ -688,9 +697,165 @@ function blkTimeline(list,overlap){
   }).join("");
   const graph=`<div class="tl-wrap"><div class="tl-grid" style="height:${H}px">${hourLines.join("")}${nowLine}<div class="tl-track">${bars}</div></div></div>`;
   const noTimeHTML=noTime.length?`<div class="tl-notime"><div style="font-size:.78em;color:var(--tx-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Sin horario asignado</div>${blkAgenda(noTime,overlap)}</div>`:"";
-  const detail=state.blkOpen?(()=>{ const b=getBloque(state.blkOpen); if(!b||b.fecha!==state.blocksDate)return""; return `<div class="tl-detail">${blkHeadHTML(b,overlap.has(b.id))}<div class="blk-tasks">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div><button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button></div>`; })():`<div class="tl-hint">Tocá un bloque para ver y editar sus tareas.</div>`;
+  const detail=state.blkOpen?(()=>{ const b=getBloque(state.blkOpen); if(!b||b.fecha!==state.blocksDate)return""; return `<div class="tl-detail">${blkHeadHTML(b,overlap.has(b.id))}<div class="blk-tasks">${b.tareas.map(id=>blkTaskRow(b,id)).join("")||'<div style="color:var(--tx-faint);font-size:.84em;padding:4px 2px">Sin tareas todavía.</div>'}</div>${dayLocked(b.fecha)?'':`<button class="blk-addtask" data-act="blkPick" data-id="${b.id}">＋ Agregar tarea</button>`}</div>`; })():`<div class="tl-hint">Tocá un bloque para ver y editar sus tareas.</div>`;
   return `<div class="tl-layout"><div>${graph}${noTimeHTML}</div><div>${detail}</div></div>`;
 }
+/* ---------- Planificación: asignaciones vigentes y liberación automática ----------
+   Regla: una tarea está "asignada" sólo si figura en un bloque de hoy o de un día futuro.
+   Los bloques de días pasados quedan como historial: ya no retienen la tarea. */
+const LOOSE = "Sin bloque";
+function blocksOn(date){ return state.bloques.filter(b=>b.fecha===date); }
+function planBlock(id){ const t0=today(); return state.bloques.find(b=>b.fecha&&b.fecha>=t0&&(b.tareas||[]).includes(id))||null; }
+function pastPlanDates(id){ const t0=today(); return [...new Set(state.bloques.filter(b=>b.fecha&&b.fecha<t0&&(b.tareas||[]).includes(id)).map(b=>b.fecha))].sort(); }
+function postponed(t){ return isOpen(t)?pastPlanDates(t.id).length:0; }
+function isAvailable(t){ return isOpen(t)&&!planBlock(t.id); }
+function freedTasks(){ return state.tasks.filter(t=>isAvailable(t)&&pastPlanDates(t.id).length).sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")); }
+function availableTasks(q){
+  const s=(q||"").trim().toLowerCase();
+  let l=state.tasks.filter(isAvailable);
+  if(s) l=l.filter(t=>t.title.toLowerCase().includes(s)||(t.area||"").toLowerCase().includes(s)||(t.resp||"").toLowerCase().includes(s));
+  const prio={urg:0,proc:1,sin:2};
+  return l.sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")||(prio[a.status]??3)-(prio[b.status]??3)||a.n-b.n);
+}
+function dayLocked(date){ return (date||state.blocksDate||today()) < today(); }
+function looseBlock(date,create){
+  let b=state.bloques.find(x=>x.fecha===date&&x.nombre===LOOSE);
+  if(!b&&create){ b={id:crypto.randomUUID(),fecha:date,nombre:LOOSE,inicio:"",fin:"",orden:0,tareas:[]}; state.bloques.push(b); saveBloqueNow(b.id); }
+  return b||null;
+}
+function clearAssign(id,onlyDate){
+  const t0=today();
+  state.bloques.forEach(b=>{
+    if(!b.fecha||b.fecha<t0)return;                 // el historial no se toca
+    if(onlyDate&&b.fecha!==onlyDate)return;
+    const k=(b.tareas||[]).indexOf(id);
+    if(k>=0){ b.tareas.splice(k,1); scheduleSaveBloque(b.id); }
+  });
+}
+function assignToDay(id,date,blockId){
+  if(!date||date<today())return false;
+  const cur=planBlock(id);
+  if(cur&&cur.fecha===date&&!blockId)return false;   // ya está ese día
+  clearAssign(id);
+  const target=blockId?getBloque(blockId):looseBlock(date,true);
+  if(!target)return false;
+  if(!target.tareas.includes(id)){ target.tareas.push(id); scheduleSaveBloque(target.id); }
+  return true;
+}
+
+/* ---------- Vista Semana ---------- */
+function weekRefDate(){ return new Date((state.weekRef||today())+"T00:00"); }
+function weekDays(){ const s=weekStart(weekRefDate()); return [...Array(7)].map((_,i)=>{ const d=new Date(s); d.setDate(d.getDate()+i); return ymd(d); }); }
+function weekLabel(){ return Cap(weekTitle(weekRefDate())); }
+function dayPlan(date){
+  const out=[];
+  blocksOn(date).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0))
+    .forEach(b=>(b.tareas||[]).forEach(id=>{ const t=taskById(id); if(t) out.push({t,b}); }));
+  return out;
+}
+function wkCard({t,b},date,locked){
+  const st=stMeta(t.status);
+  const late=t.due&&date>t.due&&isOpen(t);
+  const pp=postponed(t);
+  const freed=locked&&isOpen(t);
+  return `<div class="wk-card ${isOpen(t)?'':'is-done'} ${freed?'is-freed':''}" data-wk="${t.id}" draggable="${locked?'false':'true'}" ${freed?'title="Quedó sin completar: volvió a la bandeja"':''}>
+    <button class="wk-title" data-act="open" data-id="${t.id}">${esc(t.title)}</button>
+    <div class="wk-meta">
+      <span class="status-pill ${st.cls}" style="font-size:.74em;padding:1px 7px">${st.label}</span>
+      ${b.nombre&&b.nombre!==LOOSE?`<span class="wk-blk" title="Bloque">${esc(b.nombre)}${b.inicio?` · ${esc(b.inicio)}`:''}</span>`:''}
+      ${t.due?`<span class="wk-due ${late?'late':''}" title="${late?'La fecha de vencimiento es anterior a este día':'Vence'}">${late?'⚠ ':''}${esc(fmt(t.due))}</span>`:''}
+      ${freed?`<span class="wk-pp">liberada</span>`:(pp>1?`<span class="wk-pp" title="Ya se planificó ${pp} días y quedó pendiente">↺ ${pp}</span>`:'')}
+    </div>
+    ${locked?'':`<button class="wk-x" data-act="wkUnassign" data-t="${t.id}" data-d="${date}" title="Quitar de este día">✕</button>`}
+  </div>`;
+}
+function semanaHTML(){
+  const days=weekDays(), t0=today();
+  const cols=days.map(d=>{
+    const items=dayPlan(d), locked=d<t0;
+    const pend=items.filter(x=>isOpen(x.t)).length;
+    const dd=new Date(d+"T00:00");
+    return `<div class="wk-col ${d===t0?'is-today':''} ${locked?'is-past':''} ${[0,6].includes(dd.getDay())?'is-we':''}" data-day="${d}">
+      <div class="wk-head">
+        <span class="wk-dow">${DIAS[(dd.getDay()+6)%7]} ${dd.getDate()}</span>
+        <span class="wk-n" title="${pend} pendiente(s)">${items.length?pend:''}</span>
+      </div>
+      <div class="wk-body">${items.map(x=>wkCard(x,d,locked)).join("")||`<div class="wk-empty">${locked?'—':'Soltá una tarea acá'}</div>`}</div>
+    </div>`;
+  }).join("");
+  const avail=availableTasks(state.wkQ);
+  const freed=freedTasks().length;
+  const dayOpts=(id)=>days.filter(d=>d>=t0).map(d=>{ const dd=new Date(d+"T00:00"); return `<option value="${d}">${d===t0?'Hoy':Cap(DIAS[(dd.getDay()+6)%7])+' '+dd.getDate()}</option>`; }).join("");
+  const rows=avail.slice(0,60).map(t=>{
+    const st=stMeta(t.status), pp=postponed(t);
+    return `<div class="wk-tray-row" data-wk="${t.id}" draggable="true">
+      <div class="wk-tr-main">
+        <button class="wk-title" data-act="open" data-id="${t.id}">${esc(t.title)}</button>
+        <div class="wk-meta">
+          <span class="status-pill ${st.cls}" style="font-size:.72em;padding:1px 6px">${st.label}</span>
+          ${t.area?`<span class="wk-blk">${esc(t.area)}</span>`:''}
+          ${t.due?`<span class="wk-due ${t.due<t0?'late':''}">${t.due<t0?'⚠ ':''}${esc(fmt(t.due))}</span>`:''}
+          ${pp?`<span class="wk-pp" title="Se liberó de ${pp} día(s) anterior(es)">↺ ${pp}</span>`:''}
+        </div>
+      </div>
+      <select class="wk-to" data-act="wkAssign" data-t="${t.id}" title="Planificar para…"><option value="">→</option>${dayOpts(t.id)}</select>
+    </div>`;
+  }).join("");
+  const tray=`<div class="wk-tray">
+    <div class="wk-tray-h"><span style="font-weight:600">Bandeja</span><span class="wk-n">${avail.length}</span></div>
+    <p class="wk-tray-sub">Tareas sin día asignado.${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</p>
+    <input type="search" class="inp" placeholder="Buscar en la bandeja…" value="${esc(state.wkQ||'')}" data-act="wkSearch" data-input style="width:100%;margin-bottom:10px">
+    <div class="wk-tray-body">${rows||'<div class="wk-empty">No hay tareas disponibles.</div>'}</div>
+    ${avail.length>60?`<p class="wk-tray-sub">Se muestran 60 de ${avail.length}. Usá el buscador para filtrar.</p>`:''}
+  </div>`;
+  return `<div class="wk-layout"><div class="wk-grid">${cols}</div>${tray}</div>`;
+}
+function wireSemana(){
+  let drag=null;
+  document.querySelectorAll('[data-wk][draggable="true"]').forEach(c=>{
+    c.addEventListener('dragstart',e=>{ drag=c.dataset.wk; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
+    c.addEventListener('dragend',()=>{ c.style.opacity=''; });
+  });
+  document.querySelectorAll('.wk-col:not(.is-past)').forEach(col=>{
+    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drag-over'); });
+    col.addEventListener('dragleave',()=>col.classList.remove('drag-over'));
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drag-over');
+      if(!drag)return; assignToDay(drag,col.dataset.day); drag=null; paintTasks(); });
+  });
+  const tray=document.querySelector('.wk-tray-body');
+  if(tray){
+    tray.addEventListener('dragover',e=>{ e.preventDefault(); tray.classList.add('drag-over'); });
+    tray.addEventListener('dragleave',()=>tray.classList.remove('drag-over'));
+    tray.addEventListener('drop',e=>{ e.preventDefault(); tray.classList.remove('drag-over');
+      if(!drag)return; clearAssign(drag); drag=null; paintTasks(); });
+  }
+}
+
+/* ---------- Tareas liberadas ---------- */
+function openLiberadas(){
+  const list=freedTasks(), t0=today();
+  const blocks=blocksOn(t0).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4));
+  const opts=`<option value="">Planificar para hoy…</option>`+blocks.map(b=>`<option value="${b.id}">${esc(b.nombre||'Bloque')}${b.inicio?` · ${esc(b.inicio)}`:''}</option>`).join("")+`<option value="__loose">Hoy, sin bloque</option>`;
+  const rows=list.map(t=>{
+    const ds=pastPlanDates(t.id), st=stMeta(t.status);
+    return `<div class="cierre-row">
+      <span style="flex:1">${esc(t.title)}</span>
+      <span class="status-pill ${st.cls}" style="font-size:.74em">${st.label}</span>
+      <span class="wk-pp" title="Días en los que estuvo planificada">↺ ${ds.length} · último ${esc(fmt(ds[ds.length-1]))}</span>
+      <select class="inp" style="width:auto;font-size:.82em" data-act="freeAssign" data-t="${t.id}">${opts}</select>
+    </div>`;
+  }).join("");
+  openHtmlModal(`<div class="modal-head" style="border-bottom:1px solid var(--line);padding:16px 18px;display:flex;align-items:center;gap:12px">
+      <span class="m-title" style="flex:1;font-size:1.12em;font-weight:600">Tareas liberadas</span>
+      <button class="modal-close" data-act="cierreClose">✕</button>
+    </div>
+    <div style="padding:16px 18px">
+      <p style="font-size:.88em;color:var(--tx-dim);margin:0 0 12px">Quedaron sin completar en días que ya pasaron, así que volvieron a estar disponibles. Podés planificarlas para hoy o dejarlas en la bandeja de la vista Semana.</p>
+      ${rows?`<div class="cierre-list">${rows}</div>`:'<div class="empty" style="padding:24px">No hay tareas liberadas.</div>'}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px"><button class="btn-ghost" data-act="cierreClose">Cerrar</button></div>
+    </div>`);
+}
+
 function bloquesHTML(){
   const list=dayBloques();
   const overlap=blocksOverlap(list);
@@ -699,13 +864,22 @@ function bloquesHTML(){
   const planH=Math.floor(planMin/60),planM=planMin%60;
   const planTxt=planMin?(planH?planH+"h ":"")+(planM?planM+"m":(planH?"":"0m")):"—";
   const overload=planMin>360;
+  const locked=dayLocked(state.blocksDate);
+  const nFree=freedTasks().length;
+  const aviso=(!locked&&nFree)?`<div class="blk-freed">
+    <span>${nFree===1?'<b>1</b> tarea volvió a estar disponible':`<b>${nFree}</b> tareas volvieron a estar disponibles`}: ${nFree===1?'quedó':'quedaron'} sin completar en días que ya pasaron.</span>
+    <button class="btn-ghost" data-act="blkFreed">Ver y planificar</button>
+    <button class="btn-ghost" data-act="taskView" data-id="semana">Abrir Semana</button>
+  </div>`:'';
   const resumen=`<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)">
-    <span style="font-size:1.05em;font-weight:600;text-transform:capitalize">${esc(longDate(state.blocksDate))}</span>
+    <span style="font-size:1.05em;font-weight:600">${esc(Cap(longDate(state.blocksDate)))}</span>
     <span style="font-size:.86em;color:var(--tx-dim)"><b>${list.length}</b> bloque${list.length===1?'':'s'} · <b>${nTasks}</b> tarea${nTasks===1?'':'s'}${nUrg?` · <b style="color:var(--st-urg)">${nUrg}</b> urgente${nUrg===1?'':'s'}`:''} · <b${overload?' style="color:var(--st-proc)"':''}>${planTxt}</b> planificado${overload?' <span title="Más de 6h de foco planificadas — cuidá no sobrecargar el día">⚠</span>':''}</span>
-    ${list.length?`<button class="btn-ghost" data-act="blkCopyPrev" style="margin-left:auto;font-size:.82em">⎘ Copiar bloques de ayer</button>`:''}
-  </div>`;
+    ${locked?`<span class="blk-ro">Día cerrado · solo lectura</span>`:''}
+    ${list.length&&!locked?`<button class="btn-ghost" data-act="blkCopyPrev" style="margin-left:auto;font-size:.82em">⎘ Copiar bloques de ayer</button>`:''}
+  </div>${aviso}`;
 
   if(!list.length){
+    if(locked) return `${resumen}<div class="table-wrap"><div class="empty" style="padding:30px 20px">Este día no tuvo bloques.</div></div>`;
     return `${resumen}<div class="table-wrap"><div class="empty" style="padding:30px 20px">No hay bloques para este día.<br><br><button class="btn-primary" data-act="blkAdd">＋ Crear el primer bloque</button> &nbsp; <button class="btn-ghost" data-act="blkCopyPrev">⎘ Copiar bloques de ayer</button></div></div>`;
   }
 
@@ -719,8 +893,7 @@ function bloquesHTML(){
 function pickPanelHTML(){
   const b=getBloque(state.blockPick); if(!b)return"";
   const q=(state._blkQ||"").toLowerCase();
-  const inBlock=new Set(state.bloques.flatMap(x=>x.tareas));
-  let list=state.tasks.filter(t=>!inBlock.has(t.id)&&t.status!=='comp'&&t.status!=='desc');
+  let list=state.tasks.filter(isAvailable);
   if(q) list=list.filter(t=>t.title.toLowerCase().includes(q)||(t.area||"").toLowerCase().includes(q));
   list=list.slice(0,40);
   const rows=list.map(t=>{ const st=stMeta(t.status); return `<div class="pick-row" data-act="blkPickAdd" data-b="${b.id}" data-t="${t.id}"><span style="flex:1">${esc(t.title)}</span>${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}<span class="status-pill ${st.cls}" style="cursor:pointer">${st.label}</span></div>`; }).join("");
@@ -734,6 +907,7 @@ function pickPanelHTML(){
   </div></div>`;
 }
 function wireBloques(){
+  if(dayLocked(state.blocksDate)){ const ov=$("#blkOverlay"); if(ov) ov.onclick=e=>{ if(e.target.id==='blkOverlay'){ state.blockPick=null; paintTasks(); } }; return; }
   let dragTask=null;
   document.querySelectorAll('.blk-task').forEach(c=>{
     const sel=c.querySelector('[data-act="open"]'); if(!sel)return;
@@ -963,73 +1137,12 @@ function openRevisionSemanal(){
 
 
 /* ---------- Matriz de Eisenhower ---------- */
-const CUADRANTES = [
-  {key:"hacer",      label:"Hacer ya",   sub:"urgente + importante",     col:"#D85A30", txt:"#993C1D", bg:"#FAECE7"},
-  {key:"planificar", label:"Planificar", sub:"importante, no urgente",   col:"#185FA5", txt:"#0C447C", bg:"#E6F1FB"},
-  {key:"delegar",    label:"Delegar",    sub:"urgente, no importante",   col:"#BA7517", txt:"#854F0B", bg:"#FAEEDA"},
-  {key:"eliminar",   label:"Eliminar",   sub:"ni urgente ni importante", col:"#888780", txt:"#5F5E5A", bg:"#F1EFE8"},
-];
-function matrizTasks(){ return state.tasks.filter(t=>t.status!=='comp'&&t.status!=='desc'); }
-function matrizCard(t){
-  const st=stMeta(t.status);
-  return `<div class="mx-card" draggable="true" data-mx="${t.id}" tabindex="0" role="button" title="${esc(t.title)} — clic para abrir, arrastrá para mover">
-    <span class="mx-card-title">${esc(t.title)}</span>
-    <div class="mx-card-meta">
-      ${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}
-      <span class="status-pill ${st.cls}">${st.label}</span>
-    </div>
-  </div>`;
-}
-function matrizHTML(){
-  const all=matrizTasks();
-  const sinClasif=all.filter(t=>!CUADRANTES.some(c=>c.key===t.cuad));
-  const cell=c=>{
-    const items=all.filter(t=>t.cuad===c.key);
-    return `<div class="mx-quad" data-cuad="${c.key}" style="background:${c.bg};color:${c.col}">
-      <div class="mx-quad-h"><span style="color:${c.txt};font-weight:600">${c.label}</span><span class="mx-quad-sub" style="color:${c.txt};opacity:.65">${c.sub}</span><span class="mx-quad-n" style="color:${c.txt}">${items.length}</span></div>
-      <div class="mx-quad-body">${items.map(matrizCard).join("")||`<div class="mx-empty" style="border-color:${c.col};color:${c.txt};opacity:.6">Soltá tareas acá</div>`}</div>
-    </div>`;
-  };
-  const grid=`<div class="mx-grid">
-    <div class="mx-axis-top"><span></span><span>Urgente</span><span>No urgente</span></div>
-    <div class="mx-axis-left"><span>Importante</span><span>No importante</span></div>
-    <div class="mx-cells">${cell(CUADRANTES[0])}${cell(CUADRANTES[1])}${cell(CUADRANTES[2])}${cell(CUADRANTES[3])}</div>
-  </div>`;
-  const tray=`<div class="mx-tray" data-cuad="">
-    <div class="mx-tray-h"><span style="font-weight:600">Sin clasificar</span><span class="mx-quad-n">${sinClasif.length}</span></div>
-    <div class="mx-tray-sub">Arrastrá a un cuadrante</div>
-    <div class="mx-tray-body">${sinClasif.map(matrizCard).join("")||`<div class="mx-empty">¡Todo clasificado!</div>`}</div>
-  </div>`;
-  const counts=`<div class="mx-counts">${CUADRANTES.map(c=>{ const n=all.filter(t=>t.cuad===c.key).length; return `<div class="mx-count" style="border-top:2px solid ${c.col}"><div class="mx-count-n" style="color:${c.txt}">${n}</div><div class="mx-count-l">${c.label}</div></div>`; }).join("")}</div>`;
-  return `${counts}<div class="mx-layout">${grid}${tray}</div>`;
-}
-function wireMatriz(){
-  let dragId=null, wasDragged=false, downX=0, downY=0;
-  document.querySelectorAll('.mx-card').forEach(c=>{
-    c.addEventListener('pointerdown',e=>{ wasDragged=false; downX=e.clientX; downY=e.clientY; });
-    c.addEventListener('pointermove',e=>{ if(e.buttons&&(Math.abs(e.clientX-downX)>4||Math.abs(e.clientY-downY)>4)) wasDragged=true; });
-    c.addEventListener('dragstart',e=>{ dragId=c.dataset.mx; wasDragged=true; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
-    c.addEventListener('dragend',()=>{ c.style.opacity=''; });
-    c.addEventListener('click',()=>{ if(wasDragged){ wasDragged=false; return; } openModal(c.dataset.mx); });
-    c.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openModal(c.dataset.mx); } });
-  });
-  document.querySelectorAll('[data-cuad]').forEach(zone=>{
-    zone.addEventListener('dragover',e=>{ e.preventDefault(); zone.classList.add('mx-over'); });
-    zone.addEventListener('dragleave',()=>zone.classList.remove('mx-over'));
-    zone.addEventListener('drop',e=>{ e.preventDefault(); zone.classList.remove('mx-over');
-      if(!dragId)return; const t=state.tasks.find(x=>x.id===dragId); if(!t){dragId=null;return;}
-      const nc=zone.dataset.cuad; if(t.cuad!==nc){ t.cuad=nc; scheduleSaveTask(t.id); }
-      dragId=null; paintTasks();
-    });
-  });
-}
-
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
 function refreshSumCards(){
   const tc=$("#taskCards");
-  if(tc){ if(state.taskView==='bloques'||state.taskView==='matriz')return; tc.innerHTML=taskCards(false); bindContentArea(tc); return; }
+  if(tc){ if(state.taskView==='bloques'||state.taskView==='semana')return; tc.innerHTML=taskCards(false); bindContentArea(tc); return; }
   const wrap=document.querySelector(".sumcards"); if(!wrap)return;
-  if(state.taskView==='bloques'||state.taskView==='matriz')return;
+  if(state.taskView==='bloques'||state.taskView==='semana')return;
   const c={sin:0,proc:0,urg:0,comp:0};
   filtered().forEach(t=>{ if(c[t.status]!==undefined)c[t.status]++; });
   const order=[["sc-sin",c.sin],["sc-proc",c.proc],["sc-urg",c.urg],["sc-comp",c.comp]];
@@ -2191,6 +2304,13 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  wkNav:(el)=>{ const k=el.dataset.id; if(k==='today')state.weekRef=today(); else { const d=weekRefDate(); d.setDate(d.getDate()+(k==='next'?7:-7)); state.weekRef=ymd(d); } paintTasks(); },
+  wkSearch:(el)=>{ state.wkQ=el.value; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
+  wkAssign:(el)=>{ const d=el.value; if(!d)return; assignToDay(el.dataset.t,d); paintTasks(); },
+  wkUnassign:(el)=>{ clearAssign(el.dataset.t,el.dataset.d); paintTasks(); },
+  blkDone:(el)=>{ const t=taskById(el.dataset.id); if(!t)return; t.status=el.checked?'comp':'proc'; scheduleSaveTask(t.id); paintTasks(); },
+  blkFreed:()=>openLiberadas(),
+  freeAssign:(el)=>{ const v=el.value; if(!v)return; assignToDay(el.dataset.t,today(),v==='__loose'?null:v); openLiberadas(); paintTasks(); },
   duePick:(el)=>{ const i=document.getElementById("due_"+el.dataset.id); if(!i)return; try{ i.showPicker(); }catch(e){ i.style.position="static"; i.style.opacity=1; i.style.width="auto"; i.style.height="auto"; i.style.pointerEvents="auto"; i.focus(); } },
   bg:(el)=>{ applyBg(el.dataset.k); scheduleSaveSettings(); render(); },
   density:(el)=>{ applyDensity(el.dataset.k); scheduleSaveSettings(); render(); },
