@@ -327,24 +327,24 @@
   .m-body{ padding:16px 18px; }
   /* ================= Vista Semana ================= */
   .wk-layout{ display:grid; grid-template-columns:minmax(0,1fr) 272px; gap:12px; align-items:start; }
-  .wk-grid{ display:grid; grid-template-columns:repeat(7,minmax(108px,1fr)); gap:6px; overflow-x:auto; padding-bottom:4px; }
-  .wk-col{ background:var(--panel); border:1px solid var(--line); border-radius:10px; min-height:220px; display:flex; flex-direction:column; }
+  .wk-grid{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:10px; align-items:start; }
+  .wk-col{ background:var(--panel); border:1px solid var(--line); border-radius:10px; min-height:300px; display:flex; flex-direction:column; min-width:0; }
   .wk-col.is-we{ background:var(--panel-2); }
   .wk-col.is-past{ opacity:.6; }
   .wk-col.is-today{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
   .wk-col.drag-over{ border-color:var(--accent); background:var(--accent-soft); }
-  .wk-head{ display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line); }
+  .wk-head{ display:flex; align-items:center; gap:6px; padding:9px 11px; border-bottom:1px solid var(--line); }
   .wk-dow{ font-weight:600; font-size:.86em; text-transform:capitalize; }
   .wk-n{ margin-left:auto; min-width:20px; text-align:center; font-size:.78em; color:var(--tx-dim); background:var(--line-2); border-radius:10px; padding:0 6px; }
   .wk-body{ padding:8px; display:flex; flex-direction:column; gap:6px; flex:1; }
-  .wk-card{ position:relative; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:7px 22px 7px 8px; cursor:grab; transition:box-shadow .15s ease,transform .15s ease; }
+  .wk-card{ position:relative; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:8px 22px 8px 9px; cursor:grab; transition:box-shadow .15s ease,transform .15s ease; }
   .wk-card:hover{ box-shadow:0 3px 10px rgba(0,0,0,.08); }
   .wk-card.is-done{ opacity:.55; border-left-color:var(--st-comp); }
   .wk-card.is-freed{ border-style:dashed; border-left-style:solid; border-left-color:#b4760a; background:transparent; }
   .wk-card.is-done .wk-title{ text-decoration:line-through; }
   .wk-title{ border:0; background:none; padding:0; text-align:left; font:inherit; font-size:.86em; font-weight:600; color:var(--tx); line-height:1.3; cursor:pointer; }
   .wk-title:hover{ color:var(--accent); }
-  .wk-grid .wk-title{ display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .wk-grid .wk-title{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .wk-meta{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:5px; }
   .wk-blk,.wk-due,.wk-pp{ font-size:.74em; color:var(--tx-dim); background:var(--line-2); border-radius:5px; padding:1px 5px; white-space:nowrap; }
   .wk-due.late{ color:var(--st-urg); background:color-mix(in srgb,var(--st-urg) 12%,transparent); font-weight:600; }
@@ -366,7 +366,14 @@
   .blk-name-ro{ flex:1; font-weight:600; font-size:.94em; }
   .blk-chk{ width:15px; height:15px; accent-color:var(--accent); cursor:pointer; flex:none; }
   .blk-task.is-done .task-title{ text-decoration:line-through; color:var(--tx-faint); }
-  @media (max-width:1100px){ .wk-layout{ grid-template-columns:1fr; } .wk-tray{ position:static; max-height:none; } .wk-tray-body{ max-height:340px; } }
+  .blk-layout{ align-items:start; }
+  .blk-layout>div:first-child{ min-width:0; }
+  @media (max-width:1100px){
+    .wk-layout{ grid-template-columns:1fr; }
+    .wk-tray{ position:static; max-height:none; } .wk-tray-body{ max-height:340px; }
+    .wk-grid{ grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+    .wk-col{ min-height:150px; }
+  }
   .due-over{ color:var(--st-urg)!important; font-weight:600; } .due-soon{ color:#b4760a!important; font-weight:600; }
   .icon-link{ color:var(--tx-faint); text-decoration:none; font-size:1.05em; } .icon-link:hover{ color:var(--accent); }
   .attach-mini{ font-size:.82em; color:var(--tx-dim); display:inline-flex; align-items:center; gap:4px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
