@@ -95,7 +95,7 @@ const DEFAULTS = {
 };
 const state = {
   view:"dashboard", taskView:"tabla", scale:1, seq:1,
-  sort:{col:"n",dir:"asc"}, group:"", showDone:false,
+  sort:{col:"due",dir:"asc"}, group:"", showDone:false,
   objSel:null, objReviewMonth:null, objFilterArea:"", justSavedReview:null,
   secTab:"tareas", vencFilter:{tipo:"",status:""}, reuSel:null, secScEdit:false, reuView:"lista",
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque",
@@ -118,6 +118,19 @@ const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;
 const fmt = d => d ? new Date(d+"T00:00").toLocaleDateString("es-AR",{day:"2-digit",month:"short"}) : "—";
 const today = () => new Date().toISOString().slice(0,10);
 function dueClass(d){ if(!d)return""; if(d<today())return"due-over"; const diff=(new Date(d)-new Date(today()))/864e5; return diff<=3?"due-soon":""; }
+const daysUntil = d => Math.round((new Date(d+"T00:00")-new Date(today()+"T00:00"))/864e5);
+const isOpen = t => t.status!=='comp'&&t.status!=='desc';
+function dueBucket(t){ if(!isOpen(t))return 5; if(!t.due)return 4; const n=daysUntil(t.due); if(n<0)return 0; if(n===0)return 1; if(n<=7)return 2; return 3; }
+const DUE_BUCKETS=["Vencidas","Hoy","Próximos 7 días","Más adelante","Sin fecha","Cerradas"];
+function dueRel(t){
+  if(!t.due||!isOpen(t))return "";
+  const n=daysUntil(t.due);
+  if(n<0)return `Venció hace ${-n} d`;
+  if(n===0)return "Vence hoy";
+  if(n===1)return "Mañana";
+  if(n<=7)return `En ${n} días`;
+  return "";
+}
 const initials = n => n ? n.trim().slice(0,2).toUpperCase() : "?";
 const currentYM = () => today().slice(0,7);
 const clampMonth = ym => MONTHS.includes(ym) ? ym : MONTHS[MONTHS.length-1];
@@ -402,8 +415,7 @@ function viewTasks(){
       <button class="btn-primary" data-act="blkAdd">＋ Nuevo bloque</button>
     </div><div id="taskArea"></div>`;
   }
-  const cardList=filtered();
-  return `${statusCards(cardList)}<div class="toolbar">
+  return `<div id="taskCards">${taskCards(true)}</div><div class="toolbar">
     ${seg}
     <div class="filters">
       <select data-act="filter" data-id="estado"><option value="">Todos los estados</option>${STATUSES.map(s=>`<option value="${s.key}" ${f.estado===s.key?'selected':''}>${s.label}</option>`).join("")}</select>
@@ -416,16 +428,39 @@ function viewTasks(){
     <select class="inp" data-act="group"><option value="">Sin agrupar</option><option value="area" ${state.group==='area'?'selected':''}>Agrupar por área</option><option value="resp" ${state.group==='resp'?'selected':''}>Agrupar por responsable</option></select>
     <button class="btn-ghost ${state.showDone?'on':''}" data-act="toggleDone">${state.showDone?'Ocultar':'Ver'} completadas</button>
     <button class="btn-primary" data-act="addTask">＋ Nueva tarea</button>
-  </div><div id="taskArea"></div>`;
+  </div><div class="task-meta" id="taskMeta"></div><div id="taskArea"></div>`;
 }
-function filtered(){
-  const f=state.filters,t0=today(),weekEnd=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+function taskCards(anim){
+  const base=filtered(["estado","venc"]);
+  const over=base.filter(t=>isOpen(t)&&t.due&&t.due<today()).length;
+  const n=k=>base.filter(t=>t.status===k).length;
+  const f=state.filters;
+  const defs=[
+    ["sc-over","Vencidas",over,"venc","over"],
+    ["sc-urg","Urgentes",n("urg"),"estado","urg"],
+    ["sc-proc","En proceso",n("proc"),"estado","proc"],
+    ["sc-sin","Sin iniciar",n("sin"),"estado","sin"],
+    ["sc-comp","Completadas",n("comp"),"estado","comp"],
+  ];
+  return `<div class="sumcards">${defs.map(([cls,label,num,key,val],i)=>{
+    const on=f[key]===val;
+    return `<button class="sumcard sc-click ${cls} ${on?'on':''} ${!anim?'noanim':''}" data-act="cardFilter" data-k="${key}" data-v="${val}" aria-pressed="${on}" title="${on?'Quitar filtro':'Ver solo: '+label.toLowerCase()}" style="animation-delay:${i*60}ms"><span class="sc-label">${label}</span><span class="sc-num" ${anim?`data-count="${num}"`:''}>${anim?0:num}</span></button>`;
+  }).join("")}</div>`;
+}
+function taskMetaHTML(shown){
+  const f=state.filters; const active=Object.values(f).some(v=>v);
+  const hidden=(state.taskView==='tabla'&&!state.showDone&&!f.estado)?filtered().filter(t=>!isOpen(t)).length:0;
+  return `<span>${shown} de ${state.tasks.length} tareas${hidden?` · ${hidden} cerrada${hidden===1?'':'s'} oculta${hidden===1?'':'s'}`:''}</span>${active?`<button class="link-btn" data-act="clearFilters">Limpiar filtros</button>`:''}`;
+}
+function filtered(ignore=[]){
+  const f={...state.filters}; ignore.forEach(k=>f[k]="");
+  const t0=today(),weekEnd=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
   return state.tasks.filter(t=>{
     if(f.estado&&t.status!==f.estado)return false;
     if(f.area&&t.area!==f.area)return false;
     if(f.resp&&t.resp!==f.resp)return false;
     if(f.q&&!t.title.toLowerCase().includes(f.q.toLowerCase()))return false;
-    if(f.venc==='over'&&!(t.due&&t.due<t0))return false;
+    if(f.venc==='over'&&!(t.due&&t.due<t0&&isOpen(t)))return false;
     if(f.venc==='today'&&t.due!==t0)return false;
     if(f.venc==='week'&&!(t.due&&t.due>=t0&&t.due<=weekEnd))return false;
     if(f.venc==='none'&&t.due)return false;
@@ -436,15 +471,19 @@ function visibleTable(list){ if(state.showDone||state.filters.estado)return list
 function sortList(list){
   const s=state.sort; if(!s||!s.col)return list; const dir=s.dir==='desc'?-1:1;
   const val=t=>{ switch(s.col){ case 'n':return t.n; case 'created':return t.created; case 'title':return t.title.toLowerCase(); case 'status':return STATUSES.findIndex(x=>x.key===t.status); case 'due':return t.due||'9999-99'; case 'area':return(t.area||'~~~').toLowerCase(); case 'resp':return(t.resp||'~~~').toLowerCase(); case 'obj':return(t.obj||'~~~').toLowerCase(); default:return 0; } };
-  return [...list].sort((a,b)=>{ const va=val(a),vb=val(b); return va<vb?-1*dir:va>vb?1*dir:0; });
+  const prio=t=>({urg:0,proc:1,sin:2,comp:3,desc:4}[t.status]??5);
+  return [...list].sort((a,b)=>{ if(s.col==='due'){ const ca=!isOpen(a),cb=!isOpen(b); if(ca!==cb)return ca?1:-1; } const va=val(a),vb=val(b); if(va<vb)return -1*dir; if(va>vb)return 1*dir; return (prio(a)-prio(b))||(a.n-b.n); });
 }
 function paintTasks(){
   const area=$("#taskArea"); if(!area)return;
   if(state.taskView==='bloques'){ area.innerHTML=bloquesHTML(); bindTaskArea(); wireBloques(); return; }
   if(state.taskView==='matriz'){ area.innerHTML=matrizHTML(); bindTaskArea(); wireMatriz(); return; }
   const list=filtered();
-  if(state.taskView==='kanban'){ if(!list.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas que coincidan con los filtros.</div></div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
+  refreshSumCards();
+  const meta=$("#taskMeta");
+  if(state.taskView==='kanban'){ if(meta){ meta.innerHTML=taskMetaHTML(list.length); bindContentArea(meta); } if(!list.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas que coincidan con los filtros.</div></div>`; return; } area.innerHTML=kanbanHTML(list); bindTaskArea(); wireKanban(); return; }
   const tl=sortList(visibleTable(list));
+  if(meta){ meta.innerHTML=taskMetaHTML(tl.length); bindContentArea(meta); }
   if(!tl.length){ area.innerHTML=`<div class="table-wrap"><div class="empty">No hay tareas para mostrar. ${!state.showDone?'Quizás estén completadas — probá "Ver completadas".':'Probá cambiar los filtros o creá una nueva.'}</div></div>`; return; }
   area.innerHTML=tableHTML(tl); bindTaskArea();
 }
@@ -461,26 +500,36 @@ function rowHTML(t){
   const st=stMeta(t.status); const done=t.subs.filter(s=>s.d).length,tot=t.subs.length,pct=tot?Math.round(done/tot*100):0;
   const sp=tot?`<span class="subprog" title="${done} de ${tot} subtareas"><span class="bar"><i style="width:${pct}%"></i></span>${done}/${tot}</span>`:"";
   const rec=t.recur?`<span class="recur-badge" title="Se repite: ${recurLabel(t.recur)}">↻</span>`:"";
-  const urlCell=t.url?`<a class="icon-link" href="${esc(t.url)}" target="_blank" title="${esc(t.url)}">🔗</a>`:`<span style="color:var(--tx-faint)">—</span>`;
-  const nf=(t.files||[]).length; const fileCell=nf?`<span class="attach-mini" title="${nf} archivo(s)">📎 ${nf}</span>`:`<span style="color:var(--tx-faint)">—</span>`;
-  return `<tr><td class="num">${t.n}</td><td class="date">${fmt(t.created)}</td>
+  const nf=(t.files||[]).length;
+  const links=(t.url?`<a class="icon-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="${esc(t.url)}">🔗</a>`:"")+(nf?`<span class="attach-mini" title="${nf} archivo(s)">📎${nf>1?nf:''}</span>`:"");
+  const open=isOpen(t), b=dueBucket(t), rel=dueRel(t);
+  const rowCls=!open?'row-closed':b===0?'row-over':b===1?'row-today':'';
+  return `<tr class="${rowCls}"><td class="num">${t.n}</td>
     <td><div class="title-wrap"><button class="task-title" data-act="open" data-id="${t.id}">${esc(t.title)}${rec}</button>${sp}</div></td>
-    <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select></td>
-    <td class="date ${dueClass(t.due)}">${fmt(t.due)}</td>
-    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="area">${optionList(state.areas,t.area,"—")}</select></td>
-    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="resp">${optionList(state.responsables,t.resp,"—")}</select></td>
-    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="obj"><option value="">—</option>${state.objetivos.map(o=>`<option value="${o.tag}" ${o.tag===t.obj?'selected':''}>${o.tag}</option>`).join("")}</select></td>
-    <td style="text-align:center">${urlCell}</td><td>${fileCell}</td></tr>`;
+    <td><select class="status-pill ${st.cls}" data-act="setF" data-id="${t.id}" data-f="status" aria-label="Estado">${STATUSES.map(s=>`<option value="${s.key}" ${s.key===t.status?'selected':''}>${s.label}</option>`).join("")}</select></td>
+    <td class="due-cell ${open?dueClass(t.due):''}"><input type="date" class="due-inp ${t.due?'':'is-empty'}" value="${esc(t.due||'')}" data-act="setF" data-id="${t.id}" data-f="due" aria-label="Vencimiento">${rel?`<span class="due-rel">${rel}</span>`:''}</td>
+    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="area" aria-label="Área">${optionList(state.areas,t.area,"—")}</select></td>
+    <td><select class="cell-edit" data-act="setF" data-id="${t.id}" data-f="resp" aria-label="Responsable">${optionList(state.responsables,t.resp,"—")}</select></td>
+    <td class="date dim">${fmt(t.created)}</td>
+    <td class="links">${links||'<span class="none">—</span>'}</td></tr>`;
 }
+const TASK_COLS=8;
 function tableHTML(list){
   let body;
-  if(!state.group)body=list.map(rowHTML).join("");
-  else{ const groups={}; list.forEach(t=>{ const g=t[state.group]||"(sin asignar)"; (groups[g]=groups[g]||[]).push(t); }); body=Object.keys(groups).sort().map(g=>`<tr class="group-row"><td colspan="10">${esc(g)} · ${groups[g].length}</td></tr>${groups[g].map(rowHTML).join("")}`).join(""); }
-  return `<div class="table-wrap"><table class="tasks"><thead><tr>${th('n','N°')}${th('created','Creada')}${th('title','Tarea')}${th('status','Estado')}${th('due','Vence')}${th('area','Área')}${th('resp','Responsable')}${th('obj','Objetivo')}<th>URL</th><th>Adjunto</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  const s=state.sort;
+  if(state.group){ const groups={}; list.forEach(t=>{ const g=t[state.group]||"(sin asignar)"; (groups[g]=groups[g]||[]).push(t); }); body=Object.keys(groups).sort().map(g=>`<tr class="group-row"><td colspan="${TASK_COLS}">${esc(g)} <span class="gcount">${groups[g].length}</span></td></tr>${groups[g].map(rowHTML).join("")}`).join(""); }
+  else if(s.col==='due'&&s.dir==='asc'){
+    // separadores según qué tan cerca está el vencimiento
+    const counts={}; list.forEach(t=>{ const b=dueBucket(t); counts[b]=(counts[b]||0)+1; });
+    let last=-1;
+    body=list.map(t=>{ const b=dueBucket(t); let h=""; if(b!==last){ last=b; h=`<tr class="group-row due-g g${b}"><td colspan="${TASK_COLS}">${DUE_BUCKETS[b]} <span class="gcount">${counts[b]}</span></td></tr>`; } return h+rowHTML(t); }).join("");
+  }
+  else body=list.map(rowHTML).join("");
+  return `<div class="table-wrap"><table class="tasks tasks-main"><colgroup><col style="width:52px"><col><col style="width:140px"><col style="width:150px"><col style="width:150px"><col style="width:140px"><col style="width:84px"><col style="width:76px"></colgroup><thead><tr>${th('n','N°')}${th('title','Tarea')}${th('status','Estado')}${th('due','Vence')}${th('area','Área')}${th('resp','Responsable')}${th('created','Creada')}<th>Enlaces</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function kanbanHTML(list){
   const cols=STATUSES.map(s=>{
-    const items=list.filter(t=>t.status===s.key);
+    const items=list.filter(t=>t.status===s.key).sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||a.n-b.n);
     const cards=items.map(t=>{ const done=t.subs.filter(x=>x.d).length,tot=t.subs.length;
       return `<div class="kcard" draggable="true" data-id="${t.id}" data-act="open"><div class="kt">${esc(t.title)}${t.recur?' <span class="recur-badge" title="Se repite: '+recurLabel(t.recur)+'">↻</span>':''}</div><div class="kmeta">${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}${tot?`<span title="subtareas">☑ ${done}/${tot}</span>`:''}${t.due?`<span class="${dueClass(t.due)}">📅 ${fmt(t.due)}</span>`:''}${t.resp?`<span class="who" title="${esc(t.resp)}">${initials(t.resp)}</span>`:''}</div></div>`;
     }).join("");
@@ -920,6 +969,8 @@ function wireMatriz(){
 
 function spawnRecurrence(t){ const nt={id:crypto.randomUUID(),n:state.seq++,created:today(),title:t.title,status:'sin',due:nextDue(t.due||today(),t.recur),area:t.area,resp:t.resp,obj:t.obj,url:t.url,file:null,detail:t.detail,recur:t.recur,subs:t.subs.map(s=>({t:s.t,d:false}))}; state.tasks.unshift(nt); saveTaskNow(nt.id); }
 function refreshSumCards(){
+  const tc=$("#taskCards");
+  if(tc){ if(state.taskView==='bloques'||state.taskView==='matriz')return; tc.innerHTML=taskCards(false); bindContentArea(tc); return; }
   const wrap=document.querySelector(".sumcards"); if(!wrap)return;
   if(state.taskView==='bloques'||state.taskView==='matriz')return;
   const c={sin:0,proc:0,urg:0,comp:0};
@@ -927,6 +978,7 @@ function refreshSumCards(){
   const order=[["sc-sin",c.sin],["sc-proc",c.proc],["sc-urg",c.urg],["sc-comp",c.comp]];
   order.forEach(([cls,n])=>{ const el=wrap.querySelector("."+cls+" .sc-num"); if(el){ el.textContent=n; el.dataset.count=n; } });
 }
+function syncFilterSelects(){ document.querySelectorAll('.filters [data-act="filter"]').forEach(el=>{ el.value=state.filters[el.dataset.id]||""; }); }
 function refreshTasks(){ if(state.view==='tareas'){ paintTasks(); refreshSumCards(); } else render(); }
 function setField(id,field,val){ const t=state.tasks.find(x=>x.id===id); if(!t)return; const prev=t[field]; t[field]=val; if(field==='status'&&val==='comp'&&t.recur&&prev!=='comp')spawnRecurrence(t); scheduleSaveTask(id); refreshTasks(); }
 function addTask(){ const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Nueva tarea",status:"sin",due:"",area:"",resp:"",obj:"",url:"",file:null,detail:"",recur:"",subs:[]}; state.tasks.unshift(t); saveTaskNow(t.id); paintTasks(); openModal(t.id); }
@@ -2066,6 +2118,8 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  cardFilter:(el)=>{ const k=el.dataset.k,v=el.dataset.v,f=state.filters; const on=f[k]===v; f.estado="";f.venc=""; if(!on)f[k]=v; syncFilterSelects(); paintTasks(); },
+  clearFilters:()=>{ state.filters={estado:"",area:"",resp:"",venc:"",q:""}; render(); },
   filter:(el)=>{ state.filters[el.dataset.id]=el.value; paintTasks(); },
   group:(el)=>{ state.group=el.value; paintTasks(); },
   toggleDone:()=>{ state.showDone=!state.showDone; render(); },

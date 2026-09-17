@@ -367,6 +367,39 @@
   .due-over{ color:var(--st-urg)!important; font-weight:600; } .due-soon{ color:#b4760a!important; font-weight:600; }
   .icon-link{ color:var(--tx-faint); text-decoration:none; font-size:1.05em; } .icon-link:hover{ color:var(--accent); }
   .attach-mini{ font-size:.82em; color:var(--tx-dim); display:inline-flex; align-items:center; gap:4px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* ---------- Seguimiento: tabla principal ---------- */
+  table.tasks.tasks-main{ min-width:860px; table-layout:fixed; }
+  table.tasks.tasks-main tbody td{ padding:7px 10px; }
+  table.tasks.tasks-main .title-wrap{ flex-direction:row; flex-wrap:nowrap; align-items:center; gap:8px; min-width:0; max-width:none; }
+  table.tasks.tasks-main .subprog{ flex:none; padding-left:0; }
+  table.tasks.tasks-main .task-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; min-width:0; }
+  table.tasks.tasks-main tbody tr.row-over{ box-shadow:inset 3px 0 0 var(--st-urg); }
+  table.tasks.tasks-main tbody tr.row-today{ box-shadow:inset 3px 0 0 #e3a008; }
+  table.tasks.tasks-main tbody tr.row-closed td{ opacity:.55; }
+  table.tasks.tasks-main tbody tr.row-closed .task-title{ text-decoration:line-through; text-decoration-color:var(--tx-faint); }
+  td.date.dim{ color:var(--tx-faint); font-size:.92em; }
+  td.links{ white-space:nowrap; } td.links .icon-link{ margin-right:6px; } td.links .none{ color:var(--tx-faint); }
+  .due-cell{ white-space:nowrap; }
+  .due-inp{ border:1px solid transparent; background:transparent; border-radius:6px; padding:3px 4px; font:inherit; font-variant-numeric:tabular-nums; color:inherit; width:100%; max-width:132px; cursor:pointer; display:block; }
+  .due-inp:hover{ border-color:var(--line); } .due-inp:focus{ border-color:var(--accent); outline:none; background:var(--panel); }
+  .due-inp.is-empty:not(:focus){ color:var(--tx-faint); }
+  .due-inp::-webkit-calendar-picker-indicator{ opacity:.35; cursor:pointer; } .due-inp:hover::-webkit-calendar-picker-indicator{ opacity:.8; }
+  .due-rel{ display:block; font-size:.8em; font-weight:600; padding-left:5px; line-height:1.2; }
+  .due-cell:not(.due-over):not(.due-soon) .due-rel{ color:var(--tx-dim); font-weight:500; }
+  tr.group-row .gcount{ display:inline-block; min-width:20px; text-align:center; margin-left:6px; padding:0 6px; border-radius:10px; background:var(--line); color:var(--tx-dim); font-size:.9em; letter-spacing:0; }
+  tr.group-row.due-g td{ text-transform:none; letter-spacing:0; font-size:.84em; padding:10px 10px 6px; border-bottom:1px solid var(--line); }
+  tr.group-row.g0 td{ color:var(--st-urg); } tr.group-row.g0 .gcount{ background:#fdecec; color:#c2353a; }
+  tr.group-row.g5 td{ color:var(--tx-faint); }
+  tr.group-row.g1 td{ color:#b4760a; } tr.group-row.g1 .gcount{ background:#fdf3e2; color:#b4760a; }
+  .task-meta{ display:flex; align-items:center; gap:12px; font-size:.82em; color:var(--tx-dim); margin:-4px 2px 10px; min-height:1.4em; }
+  .link-btn{ border:0; background:none; padding:0; color:var(--accent); font-size:1em; font-weight:600; }
+  .link-btn:hover{ text-decoration:underline; }
+  .sumcard.sc-click{ font:inherit; text-align:left; cursor:pointer; color:inherit; transition:border-color .14s ease,background .14s ease,transform .14s ease; }
+  .sumcard.sc-click:hover{ border-color:var(--sc-accent); }
+  .sumcard.sc-click.on{ background:color-mix(in srgb,var(--sc-accent) 10%,var(--panel)); border-color:var(--sc-accent); }
+  .sumcard.sc-click:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .sumcard.sc-over{ --sc-accent:#c2353a; } .sumcard.sc-over .sc-num{ color:#c2353a; }
+  .sumcards .sumcard.noanim{ animation:none; }
   .empty{ text-align:center; color:var(--tx-faint); padding:48px 20px; font-size:.92em; }
 
   .kanban{ display:flex; gap:13px; align-items:flex-start; overflow-x:auto; padding-bottom:8px; }
