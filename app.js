@@ -745,8 +745,10 @@ function assignToDay(id,date,blockId){
 
 /* ---------- Vista Semana ---------- */
 function weekRefDate(){ return new Date((state.weekRef||today())+"T00:00"); }
-function weekDays(){ const s=weekStart(weekRefDate()); return [...Array(7)].map((_,i)=>{ const d=new Date(s); d.setDate(d.getDate()+i); return ymd(d); }); }
-function weekLabel(){ return Cap(weekTitle(weekRefDate())); }
+function weekDays(n){ const s=weekStart(weekRefDate()); return [...Array(n||5)].map((_,i)=>{ const d=new Date(s); d.setDate(d.getDate()+i); return ymd(d); }); }
+function weekendDays(){ return weekDays(7).slice(5); }
+function weekLabel(){ const d=weekDays(); const a=new Date(d[0]+"T00:00"), b=new Date(d[4]+"T00:00");
+  return `${a.getDate()} ${MESES[a.getMonth()].slice(0,3)} – ${b.getDate()} ${MESES[b.getMonth()].slice(0,3)}`; }
 function dayPlan(date){
   const out=[];
   blocksOn(date).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0))
@@ -783,9 +785,25 @@ function semanaHTML(){
       <div class="wk-body">${items.map(x=>wkCard(x,d,locked)).join("")||`<div class="wk-empty">${locked?'—':'Soltá una tarea acá'}</div>`}</div>
     </div>`;
   }).join("");
+  const we=weekendDays().map(d=>({d,items:dayPlan(d)})).filter(x=>x.items.length);
+  const weCol=we.length?`<div class="wk-col is-we" data-day="${we[we.length-1].d}">
+    <div class="wk-head"><span class="wk-dow">Fin de semana</span><span class="wk-n">${we.reduce((n,x)=>n+x.items.filter(y=>isOpen(y.t)).length,0)}</span></div>
+    <div class="wk-body">${we.map(x=>x.items.map(it=>wkCard(it,x.d,x.d<t0)).join("")).join("")}</div>
+  </div>`:'';
+  return `<div class="wk-layout"><div class="wk-grid">${cols}${weCol}</div>${trayHTML('semana')}</div>`;
+}
+function trayHTML(mode){
+  const t0=today();
   const avail=availableTasks(state.wkQ);
   const freed=freedTasks().length;
-  const dayOpts=(id)=>days.filter(d=>d>=t0).map(d=>{ const dd=new Date(d+"T00:00"); return `<option value="${d}">${d===t0?'Hoy':Cap(DIAS[(dd.getDay()+6)%7])+' '+dd.getDate()}</option>`; }).join("");
+  let opts;
+  if(mode==='bloques'){
+    const bl=blocksOn(state.blocksDate).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0));
+    opts=bl.map(b=>`<option value="${b.id}">${esc(b.nombre||'Bloque')}${b.inicio?` · ${esc(b.inicio)}`:''}</option>`).join("")+`<option value="__loose">Sin bloque</option>`;
+  } else {
+    opts=weekDays().filter(d=>d>=t0).map(d=>{ const dd=new Date(d+"T00:00"); return `<option value="${d}">${d===t0?'Hoy':Cap(DIAS[(dd.getDay()+6)%7])+' '+dd.getDate()}</option>`; }).join("");
+  }
+  const act=mode==='bloques'?'trayToBlock':'wkAssign';
   const rows=avail.slice(0,60).map(t=>{
     const st=stMeta(t.status), pp=postponed(t);
     return `<div class="wk-tray-row" data-wk="${t.id}" draggable="true">
@@ -798,17 +816,16 @@ function semanaHTML(){
           ${pp?`<span class="wk-pp" title="Se liberó de ${pp} día(s) anterior(es)">↺ ${pp}</span>`:''}
         </div>
       </div>
-      <select class="wk-to" data-act="wkAssign" data-t="${t.id}" title="Planificar para…"><option value="">→</option>${dayOpts(t.id)}</select>
+      <select class="wk-to" data-act="${act}" data-t="${t.id}" title="${mode==='bloques'?'Agregar a un bloque de este día':'Planificar para…'}"><option value="">→</option>${opts}</select>
     </div>`;
   }).join("");
-  const tray=`<div class="wk-tray">
+  return `<div class="wk-tray">
     <div class="wk-tray-h"><span style="font-weight:600">Bandeja</span><span class="wk-n">${avail.length}</span></div>
-    <p class="wk-tray-sub">Tareas sin día asignado.${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</p>
+    <p class="wk-tray-sub">${mode==='bloques'?'Arrastrá una tarea a un bloque.':'Tareas sin día asignado.'}${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</p>
     <input type="search" class="inp" placeholder="Buscar en la bandeja…" value="${esc(state.wkQ||'')}" data-act="wkSearch" data-input style="width:100%;margin-bottom:10px">
     <div class="wk-tray-body">${rows||'<div class="wk-empty">No hay tareas disponibles.</div>'}</div>
     ${avail.length>60?`<p class="wk-tray-sub">Se muestran 60 de ${avail.length}. Usá el buscador para filtrar.</p>`:''}
   </div>`;
-  return `<div class="wk-layout"><div class="wk-grid">${cols}</div>${tray}</div>`;
 }
 function wireSemana(){
   let drag=null;
@@ -888,7 +905,8 @@ function bloquesHTML(){
   else if(state.blkView==='timeline') body=blkTimeline(list,overlap);
   else body=blkAgenda(list,overlap);
 
-  return `${resumen}${body}${state.blockPick?pickPanelHTML():''}`;
+  const withTray=locked?body:`<div class="wk-layout blk-layout"><div>${body}</div>${trayHTML('bloques')}</div>`;
+  return `${resumen}${withTray}${state.blockPick?pickPanelHTML():''}`;
 }
 function pickPanelHTML(){
   const b=getBloque(state.blockPick); if(!b)return"";
@@ -909,6 +927,16 @@ function pickPanelHTML(){
 function wireBloques(){
   if(dayLocked(state.blocksDate)){ const ov=$("#blkOverlay"); if(ov) ov.onclick=e=>{ if(e.target.id==='blkOverlay'){ state.blockPick=null; paintTasks(); } }; return; }
   let dragTask=null;
+  document.querySelectorAll('.wk-tray-row[data-wk]').forEach(c=>{
+    c.addEventListener('dragstart',e=>{ dragTask=c.dataset.wk; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
+    c.addEventListener('dragend',()=>{ c.style.opacity=''; });
+  });
+  const tray=document.querySelector('.wk-tray-body');
+  if(tray){
+    tray.addEventListener('dragover',e=>{ e.preventDefault(); tray.classList.add('drag-over'); });
+    tray.addEventListener('dragleave',()=>tray.classList.remove('drag-over'));
+    tray.addEventListener('drop',e=>{ e.preventDefault(); tray.classList.remove('drag-over'); if(!dragTask)return; clearAssign(dragTask); dragTask=null; paintTasks(); });
+  }
   document.querySelectorAll('.blk-task').forEach(c=>{
     const sel=c.querySelector('[data-act="open"]'); if(!sel)return;
     c.setAttribute('draggable','true');
@@ -921,8 +949,7 @@ function wireBloques(){
     card.addEventListener('dragleave',()=>card.classList.remove('drag-over'));
     card.addEventListener('drop',e=>{ e.preventDefault(); card.classList.remove('drag-over');
       if(!dragTask)return; const target=list[idx]; if(!target||target.tareas.includes(dragTask)){ dragTask=null; return; }
-      state.bloques.forEach(b=>{ if(b.fecha===state.blocksDate){ const k=b.tareas.indexOf(dragTask); if(k>=0){ b.tareas.splice(k,1); scheduleSaveBloque(b.id); } } });
-      target.tareas.push(dragTask); scheduleSaveBloque(target.id); dragTask=null; paintTasks();
+      assignToDay(dragTask,state.blocksDate,target.id); dragTask=null; paintTasks();
     });
   });
   const ov=$("#blkOverlay"); if(ov) ov.onclick=e=>{ if(e.target.id==='blkOverlay'){ state.blockPick=null; state._blkQ=""; paintTasks(); } };
@@ -2306,6 +2333,7 @@ const ACTIONS = {
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
   wkNav:(el)=>{ const k=el.dataset.id; if(k==='today')state.weekRef=today(); else { const d=weekRefDate(); d.setDate(d.getDate()+(k==='next'?7:-7)); state.weekRef=ymd(d); } paintTasks(); },
   wkSearch:(el)=>{ state.wkQ=el.value; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
+  trayToBlock:(el)=>{ const v=el.value; if(!v)return; assignToDay(el.dataset.t,state.blocksDate,v==='__loose'?null:v); paintTasks(); },
   wkAssign:(el)=>{ const d=el.value; if(!d)return; assignToDay(el.dataset.t,d); paintTasks(); },
   wkUnassign:(el)=>{ clearAssign(el.dataset.t,el.dataset.d); paintTasks(); },
   blkDone:(el)=>{ const t=taskById(el.dataset.id); if(!t)return; t.status=el.checked?'comp':'proc'; scheduleSaveTask(t.id); paintTasks(); },
