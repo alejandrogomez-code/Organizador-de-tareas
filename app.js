@@ -133,7 +133,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque", bg:"banda", density:"normal",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
-  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false,
+  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false, wkFold:{},
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
@@ -442,6 +442,7 @@ function viewTasks(){
       <span style="font-size:.9em;font-weight:600;min-width:150px;text-align:center">${esc(weekLabel())}</span>
       <button class="btn-ghost" data-act="wkNav" data-id="next" title="Semana siguiente">›</button>
       <button class="btn-ghost" data-act="wkNav" data-id="today">Esta semana</button>
+      <button class="btn-ghost" data-act="wkFoldAll" data-k="${Object.keys(state.wkFold||{}).some(d=>state.wkFold[d])?'unfold':'fold'}" title="Plegar o desplegar todos los días">${Object.keys(state.wkFold||{}).some(d=>state.wkFold[d])?'⤢ Desplegar todo':'⤡ Plegar todo'}</button>
     </div><div id="taskArea"></div>`;
   }
   if(state.taskView==='bloques'){
@@ -793,13 +794,16 @@ function semanaHTML(){
     }).join("");
     const sueltas=looseCards?`<div class="wk-loose">${named.length?'<div class="wk-grp-h ro"><span class="wk-grp-n">Sin bloque</span></div>':''}${looseCards}</div>`:'';
     const vacio=(!grupos&&!looseCards)?`<div class="wk-empty">${locked?'—':'Soltá una tarea acá'}</div>`:'';
-    return `<div class="wk-col ${d===t0?'is-today':''} ${locked?'is-past':''} ${[0,6].includes(dd.getDay())?'is-we':''}" data-day="${d}">
+    const fold=!!state.wkFold[d];
+    return `<div class="wk-col ${d===t0?'is-today':''} ${locked?'is-past':''} ${[0,6].includes(dd.getDay())?'is-we':''} ${fold?'is-fold':''}" data-day="${d}">
       <div class="wk-head">
+        <button class="wk-fold" data-act="wkFold" data-d="${d}" title="${fold?'Desplegar el día':'Plegar el día'}" aria-expanded="${!fold}">${fold?'▸':'▾'}</button>
         <span class="wk-dow">${DIAS[(dd.getDay()+6)%7]} ${dd.getDate()}</span>
         <span class="wk-n" title="${pend} pendiente(s)">${items.length?pend:''}</span>
         ${locked?'':`<button class="wk-add" data-act="wkBlockNew" data-d="${d}" title="Crear un bloque en este día">＋</button>`}
       </div>
-      <div class="wk-body">${grupos}${sueltas}${vacio}</div>
+      ${fold?`<button class="wk-foldnote" data-act="wkFold" data-d="${d}">${items.length?`${items.length} tarea${items.length===1?'':'s'} · ${named.length} bloque${named.length===1?'':'s'}`:'Sin tareas'}</button>`
+            :`<div class="wk-body">${grupos}${sueltas}${vacio}</div>`}
     </div>`;
   }).join("");
   const we=weekendDays().map(d=>({d,items:dayPlan(d)})).filter(x=>x.items.length);
@@ -818,7 +822,13 @@ function trayHTML(mode){
     const bl=blocksOn(state.blocksDate).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0));
     opts=bl.map(b=>`<option value="${b.id}">${esc(b.nombre||'Bloque')}${b.inicio?` · ${esc(b.inicio)}`:''}</option>`).join("")+`<option value="__loose">Sin bloque</option>`;
   } else {
-    opts=weekDays().filter(d=>d>=t0).map(d=>{ const dd=new Date(d+"T00:00"); return `<option value="${d}">${d===t0?'Hoy':Cap(DIAS[(dd.getDay()+6)%7])+' '+dd.getDate()}</option>`; }).join("");
+    opts=weekDays().filter(d=>d>=t0).map(d=>{
+      const dd=new Date(d+"T00:00");
+      const lbl=(d===t0?'Hoy':Cap(DIAS[(dd.getDay()+6)%7]))+' '+dd.getDate();
+      const bl=blocksOn(d).filter(b=>b.nombre!==LOOSE).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0));
+      const items=[`<option value="${d}|">Sin bloque</option>`,...bl.map(b=>`<option value="${d}|${b.id}">${esc(b.nombre||'Bloque')}${b.inicio?` · ${esc(b.inicio)}`:''}</option>`)];
+      return `<optgroup label="${lbl}">${items.join("")}</optgroup>`;
+    }).join("");
   }
   const act=mode==='bloques'?'trayToBlock':'wkAssign';
   const rows=avail.slice(0,60).map(t=>{
@@ -2397,6 +2407,8 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  wkFold:(el)=>{ const d=el.dataset.d; state.wkFold[d]=!state.wkFold[d]; paintTasks(); },
+  wkFoldAll:(el)=>{ const on=el.dataset.k==='fold'; weekDays().forEach(d=>{ if(on)state.wkFold[d]=true; else delete state.wkFold[d]; }); paintTasks(); },
   wkBlockNew:(el)=>openBlockModal(el.dataset.d,null),
   wkBlockEdit:(el)=>openBlockModal(null,el.dataset.id),
   wkBlockSave:(el)=>saveBlockFromModal(el.dataset.d,el.dataset.id),
@@ -2406,7 +2418,7 @@ const ACTIONS = {
   wkNav:(el)=>{ const k=el.dataset.id; if(k==='today')state.weekRef=today(); else { const d=weekRefDate(); d.setDate(d.getDate()+(k==='next'?7:-7)); state.weekRef=ymd(d); } paintTasks(); },
   wkSearch:(el)=>{ state.wkQ=el.value; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
   trayToBlock:(el)=>{ const v=el.value; if(!v)return; assignToDay(el.dataset.t,state.blocksDate,v==='__loose'?null:v); paintTasks(); },
-  wkAssign:(el)=>{ const d=el.value; if(!d)return; assignToDay(el.dataset.t,d); paintTasks(); },
+  wkAssign:(el)=>{ const v=el.value; if(!v)return; const [d,b]=v.split("|"); assignToDay(el.dataset.t,d,b||null); paintTasks(); },
   wkUnassign:(el)=>{ clearAssign(el.dataset.t,el.dataset.d); paintTasks(); },
   blkDone:(el)=>{ const t=taskById(el.dataset.id); if(!t)return; t.status=el.checked?'comp':'proc'; scheduleSaveTask(t.id); paintTasks(); },
   blkFreed:()=>openLiberadas(),
