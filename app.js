@@ -755,7 +755,7 @@ function dayPlan(date){
     .forEach(b=>(b.tareas||[]).forEach(id=>{ const t=taskById(id); if(t) out.push({t,b}); }));
   return out;
 }
-function wkCard({t,b},date,locked){
+function wkCard({t,b},date,locked,inGrp){
   const st=stMeta(t.status);
   const late=t.due&&date>t.due&&isOpen(t);
   const pp=postponed(t);
@@ -764,7 +764,7 @@ function wkCard({t,b},date,locked){
     <button class="wk-title" data-act="open" data-id="${t.id}">${esc(t.title)}</button>
     <div class="wk-meta">
       <span class="status-pill ${st.cls}" style="font-size:.74em;padding:1px 7px">${st.label}</span>
-      ${b.nombre&&b.nombre!==LOOSE?`<span class="wk-blk" title="Bloque">${esc(b.nombre)}${b.inicio?` · ${esc(b.inicio)}`:''}</span>`:''}
+      ${!inGrp&&b.nombre&&b.nombre!==LOOSE?`<span class="wk-blk" title="Bloque: ${esc(b.nombre)}">${esc(b.nombre)}${b.inicio?` · ${esc(b.inicio)}`:''}</span>`:''}
       ${t.due?`<span class="wk-due ${late?'late':''}" title="${late?'La fecha de vencimiento es anterior a este día':'Vence'}">${late?'⚠ ':''}${esc(fmt(t.due))}</span>`:''}
       ${freed?`<span class="wk-pp">liberada</span>`:(pp>1?`<span class="wk-pp" title="Ya se planificó ${pp} días y quedó pendiente">↺ ${pp}</span>`:'')}
     </div>
@@ -777,12 +777,29 @@ function semanaHTML(){
     const items=dayPlan(d), locked=d<t0;
     const pend=items.filter(x=>isOpen(x.t)).length;
     const dd=new Date(d+"T00:00");
+    const bl=blocksOn(d).sort((a,b)=>(minutes(a.inicio)??1e4)-(minutes(b.inicio)??1e4)||(a.orden||0)-(b.orden||0));
+    const named=bl.filter(b=>b.nombre!==LOOSE);
+    const loose=bl.filter(b=>b.nombre===LOOSE);
+    const looseCards=loose.flatMap(b=>(b.tareas||[]).map(id=>{ const t=taskById(id); return t?wkCard({t,b},d,locked):''; })).join("");
+    const grupos=named.map(b=>{
+      const cards=(b.tareas||[]).map(id=>{ const t=taskById(id); return t?wkCard({t,b},d,locked,true):''; }).join("");
+      const rango=(b.inicio||b.fin)?`${b.inicio||'—'}${b.fin?'–'+b.fin:''}`:'';
+      return `<div class="wk-grp" data-day="${d}" data-b="${b.id}">
+        <div class="wk-grp-h" title="${esc(b.nombre||'Bloque')}${rango?' · '+esc(rango):''}" ${locked?'':`data-act="wkBlockEdit" data-id="${b.id}"`}>
+          <span class="wk-grp-n">${esc(b.nombre||'Bloque')}</span>${rango?`<span class="wk-grp-t">${esc(rango)}</span>`:''}
+        </div>
+        <div class="wk-grp-b">${cards||`<div class="wk-empty sm">${locked?'—':'Soltá acá'}</div>`}</div>
+      </div>`;
+    }).join("");
+    const sueltas=looseCards?`<div class="wk-loose">${named.length?'<div class="wk-grp-h ro"><span class="wk-grp-n">Sin bloque</span></div>':''}${looseCards}</div>`:'';
+    const vacio=(!grupos&&!looseCards)?`<div class="wk-empty">${locked?'—':'Soltá una tarea acá'}</div>`:'';
     return `<div class="wk-col ${d===t0?'is-today':''} ${locked?'is-past':''} ${[0,6].includes(dd.getDay())?'is-we':''}" data-day="${d}">
       <div class="wk-head">
         <span class="wk-dow">${DIAS[(dd.getDay()+6)%7]} ${dd.getDate()}</span>
         <span class="wk-n" title="${pend} pendiente(s)">${items.length?pend:''}</span>
+        ${locked?'':`<button class="wk-add" data-act="wkBlockNew" data-d="${d}" title="Crear un bloque en este día">＋</button>`}
       </div>
-      <div class="wk-body">${items.map(x=>wkCard(x,d,locked)).join("")||`<div class="wk-empty">${locked?'—':'Soltá una tarea acá'}</div>`}</div>
+      <div class="wk-body">${grupos}${sueltas}${vacio}</div>
     </div>`;
   }).join("");
   const we=weekendDays().map(d=>({d,items:dayPlan(d)})).filter(x=>x.items.length);
@@ -833,6 +850,12 @@ function wireSemana(){
     c.addEventListener('dragstart',e=>{ drag=c.dataset.wk; e.dataTransfer.effectAllowed='move'; setTimeout(()=>c.style.opacity='.4',0); });
     c.addEventListener('dragend',()=>{ c.style.opacity=''; });
   });
+  document.querySelectorAll('.wk-col:not(.is-past) .wk-grp').forEach(g=>{
+    g.addEventListener('dragover',e=>{ e.preventDefault(); e.stopPropagation(); g.classList.add('drag-over'); });
+    g.addEventListener('dragleave',()=>g.classList.remove('drag-over'));
+    g.addEventListener('drop',e=>{ e.preventDefault(); e.stopPropagation(); g.classList.remove('drag-over');
+      if(!drag)return; assignToDay(drag,g.dataset.day,g.dataset.b); drag=null; paintTasks(); });
+  });
   document.querySelectorAll('.wk-col:not(.is-past)').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drag-over'); });
     col.addEventListener('dragleave',()=>col.classList.remove('drag-over'));
@@ -846,6 +869,46 @@ function wireSemana(){
     tray.addEventListener('drop',e=>{ e.preventDefault(); tray.classList.remove('drag-over');
       if(!drag)return; clearAssign(drag); drag=null; paintTasks(); });
   }
+}
+
+/* ---------- Bloque: alta y edición en ventana flotante ---------- */
+function openBlockModal(date,id){
+  const b=id?getBloque(id):null;
+  const d=b?b.fecha:date;
+  const dd=new Date(d+"T00:00");
+  const sug=["Foco","Reuniones","Administrativo","Operativo"];
+  openHtmlModal(`<div class="modal-head" style="border-bottom:1px solid var(--line);padding:16px 18px;display:flex;align-items:center;gap:12px">
+      <span class="m-title" style="flex:1;font-size:1.1em;font-weight:600">${b?'Editar bloque':'Nuevo bloque'} · ${Cap(DIAS[(dd.getDay()+6)%7])} ${dd.getDate()}</span>
+      <button class="modal-close" data-act="cierreClose">✕</button>
+    </div>
+    <div style="padding:16px 18px">
+      <div class="m-field"><label>Nombre</label><input class="inp" id="bmNombre" value="${esc(b?b.nombre:'')}" placeholder="Foco, Reuniones, Administrativo…" list="bmSug"></div>
+      <datalist id="bmSug">${sug.map(x=>`<option value="${x}">`).join("")}</datalist>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <div class="m-field" style="flex:1"><label>Desde</label><input type="time" class="inp" id="bmIni" value="${esc(b?b.inicio:'')}"></div>
+        <div class="m-field" style="flex:1"><label>Hasta</label><input type="time" class="inp" id="bmFin" value="${esc(b?b.fin:'')}"></div>
+      </div>
+      <p style="font-size:.8em;color:var(--tx-faint);margin:10px 0 0">Después arrastrá tareas de la bandeja al bloque, o usá el selector de cada tarea.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+        ${b?`<button class="btn-ghost" data-act="wkBlockDel" data-id="${b.id}" style="margin-right:auto;color:var(--st-urg)">Eliminar</button>`:''}
+        <button class="btn-ghost" data-act="cierreClose">Cancelar</button>
+        <button class="btn-primary" data-act="wkBlockSave" data-d="${d}" data-id="${b?b.id:''}">${b?'Guardar':'Crear bloque'}</button>
+      </div>
+    </div>`);
+  const n=$("#bmNombre"); if(n){ n.focus(); n.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); ACTIONS.wkBlockSave({dataset:{d,id:b?b.id:''}}); } }; }
+}
+function saveBlockFromModal(d,id){
+  const nombre=($("#bmNombre")?.value||"").trim()||"Bloque";
+  const inicio=$("#bmIni")?.value||"", fin=$("#bmFin")?.value||"";
+  if(nombre===LOOSE){ toast('Ese nombre está reservado. Elegí otro.'); return; }
+  let b=id?getBloque(id):null;
+  if(b){ b.nombre=nombre; b.inicio=inicio; b.fin=fin; }
+  else{
+    const maxOrden=state.bloques.filter(x=>x.fecha===d).reduce((m,x)=>Math.max(m,x.orden||0),0);
+    b={id:crypto.randomUUID(),fecha:d,nombre,inicio,fin,orden:maxOrden+1,tareas:[]};
+    state.bloques.push(b);
+  }
+  saveBloqueNow(b.id); closeModal(); paintTasks();
 }
 
 /* ---------- Tareas liberadas ---------- */
@@ -2331,6 +2394,12 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  wkBlockNew:(el)=>openBlockModal(el.dataset.d,null),
+  wkBlockEdit:(el)=>openBlockModal(null,el.dataset.id),
+  wkBlockSave:(el)=>saveBlockFromModal(el.dataset.d,el.dataset.id),
+  wkBlockDel:(el)=>{ const b=getBloque(el.dataset.id); if(!b)return;
+    if(b.tareas.length&&!confirm("¿Eliminar este bloque? Las tareas no se borran, vuelven a la bandeja."))return;
+    state.bloques=state.bloques.filter(x=>x.id!==b.id); deleteBloqueDb(b.id); closeModal(); paintTasks(); },
   wkNav:(el)=>{ const k=el.dataset.id; if(k==='today')state.weekRef=today(); else { const d=weekRefDate(); d.setDate(d.getDate()+(k==='next'?7:-7)); state.weekRef=ymd(d); } paintTasks(); },
   wkSearch:(el)=>{ state.wkQ=el.value; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
   trayToBlock:(el)=>{ const v=el.value; if(!v)return; assignToDay(el.dataset.t,state.blocksDate,v==='__loose'?null:v); paintTasks(); },
