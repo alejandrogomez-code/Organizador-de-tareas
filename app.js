@@ -807,7 +807,7 @@ function semanaHTML(){
     <div class="wk-head"><span class="wk-dow">Fin de semana</span><span class="wk-n">${we.reduce((n,x)=>n+x.items.filter(y=>isOpen(y.t)).length,0)}</span></div>
     <div class="wk-body">${we.map(x=>x.items.map(it=>wkCard(it,x.d,x.d<t0)).join("")).join("")}</div>
   </div>`:'';
-  return `<div class="wk-layout"><div class="wk-grid">${cols}${weCol}</div>${trayHTML('semana')}</div>`;
+  return `<div class="wk-stack"><div class="wk-grid">${cols}${weCol}</div>${trayHTML('semana')}</div>`;
 }
 function trayHTML(mode){
   const t0=today();
@@ -836,10 +836,13 @@ function trayHTML(mode){
       <select class="wk-to" data-act="${act}" data-t="${t.id}" title="${mode==='bloques'?'Agregar a un bloque de este día':'Planificar para…'}"><option value="">→</option>${opts}</select>
     </div>`;
   }).join("");
-  return `<div class="wk-tray">
-    <div class="wk-tray-h"><span style="font-weight:600">Bandeja</span><span class="wk-n">${avail.length}</span></div>
-    <p class="wk-tray-sub">${mode==='bloques'?'Arrastrá una tarea a un bloque.':'Tareas sin día asignado.'}${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</p>
-    <input type="search" class="inp" placeholder="Buscar en la bandeja…" value="${esc(state.wkQ||'')}" data-act="wkSearch" data-input style="width:100%;margin-bottom:10px">
+  const wide=mode!=='bloques';
+  return `<div class="wk-tray ${wide?'wide':''}">
+    <div class="wk-tray-h">
+      <span style="font-weight:600">Bandeja</span><span class="wk-n">${avail.length}</span>
+      <span class="wk-tray-sub inline">${mode==='bloques'?'Arrastrá una tarea a un bloque.':'Tareas sin día asignado; arrastralas a un día o a un bloque.'}${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</span>
+      <input type="search" class="inp tray-q" placeholder="Buscar en la bandeja…" value="${esc(state.wkQ||'')}" data-act="wkSearch" data-input>
+    </div>
     <div class="wk-tray-body">${rows||'<div class="wk-empty">No hay tareas disponibles.</div>'}</div>
     ${avail.length>60?`<p class="wk-tray-sub">Se muestran 60 de ${avail.length}. Usá el buscador para filtrar.</p>`:''}
   </div>`;
