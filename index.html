@@ -366,12 +366,20 @@
   .wk-grp-t{ font-size:.74em; color:var(--tx-faint); margin-left:auto; white-space:nowrap; }
   .wk-grp-b{ display:flex; flex-direction:column; gap:5px; }
   .wk-loose{ display:flex; flex-direction:column; gap:5px; }
-  .wk-tray{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; position:sticky; top:8px; max-height:calc(100vh - 210px); display:flex; flex-direction:column; }
-  .wk-tray-h{ display:flex; align-items:center; gap:8px; }
+  .wk-stack{ display:flex; flex-direction:column; gap:14px; }
+  .wk-tray{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; position:sticky; top:8px; max-height:calc(100vh - 270px); display:flex; flex-direction:column; min-height:0; }
+  .wk-tray.wide{ position:static; max-height:none; }
+  .wk-tray.wide .wk-tray-h{ flex-wrap:wrap; }
+  .wk-tray.wide .wk-tray-body{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px; max-height:340px; overflow-y:auto; padding-right:2px; }
+  .wk-tray .tray-q{ width:220px; margin-left:auto; }
+  .wk-tray.wide .tray-q{ width:260px; }
+  .wk-tray-sub.inline{ margin:0; flex:1 1 auto; min-width:120px; }
+  .wk-tray-h{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .wk-tray-sub{ font-size:.78em; color:var(--tx-faint); margin:4px 0 10px; }
-  .wk-tray-body{ overflow-y:auto; display:flex; flex-direction:column; gap:6px; border-radius:8px; }
+  .wk-tray:not(.wide) .wk-tray-h{ flex-wrap:wrap; } .wk-tray:not(.wide) .tray-q{ width:100%; margin-left:0; }
+  .wk-tray-body{ overflow-y:auto; display:flex; flex-direction:column; gap:6px; border-radius:8px; flex:1 1 auto; min-height:0; align-content:start; }
   .wk-tray-body.drag-over{ outline:2px dashed var(--accent); outline-offset:3px; }
-  .wk-tray-row{ display:flex; align-items:flex-start; gap:6px; border:1px solid var(--line); border-radius:8px; padding:7px 8px; cursor:grab; background:var(--panel); overflow:hidden; }
+  .wk-tray-row{ display:flex; align-items:flex-start; gap:6px; border:1px solid var(--line); border-radius:8px; padding:7px 8px; cursor:grab; background:var(--panel); overflow:hidden; flex:0 0 auto; }
   .wk-tray-row .wk-title{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
   .wk-tray-row:hover{ border-color:var(--accent); }
   .wk-tr-main{ flex:1; min-width:0; }
