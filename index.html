@@ -337,7 +337,8 @@
   .wk-dow{ font-weight:600; font-size:.86em; text-transform:capitalize; }
   .wk-n{ margin-left:auto; min-width:20px; text-align:center; font-size:.78em; color:var(--tx-dim); background:var(--line-2); border-radius:10px; padding:0 6px; }
   .wk-body{ padding:8px; display:flex; flex-direction:column; gap:6px; flex:1; }
-  .wk-card{ position:relative; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:8px 22px 8px 9px; cursor:grab; transition:box-shadow .15s ease,transform .15s ease; }
+  .wk-card{ position:relative; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:8px 22px 8px 9px; cursor:grab; overflow:hidden; min-width:0; transition:box-shadow .15s ease,transform .15s ease; }
+  .wk-card .wk-title{ width:100%; overflow-wrap:anywhere; }
   .wk-card:hover{ box-shadow:0 3px 10px rgba(0,0,0,.08); }
   .wk-card.is-done{ opacity:.55; border-left-color:var(--st-comp); }
   .wk-card.is-freed{ border-style:dashed; border-left-style:solid; border-left-color:#b4760a; background:transparent; }
@@ -346,18 +347,32 @@
   .wk-title:hover{ color:var(--accent); }
   .wk-grid .wk-title{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .wk-meta{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:5px; }
-  .wk-blk,.wk-due,.wk-pp{ font-size:.74em; color:var(--tx-dim); background:var(--line-2); border-radius:5px; padding:1px 5px; white-space:nowrap; }
+  .wk-blk,.wk-due,.wk-pp{ font-size:.74em; color:var(--tx-dim); background:var(--line-2); border-radius:5px; padding:1px 5px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wk-meta{ min-width:0; }
   .wk-due.late{ color:var(--st-urg); background:color-mix(in srgb,var(--st-urg) 12%,transparent); font-weight:600; }
   .wk-pp{ color:#b4760a; background:color-mix(in srgb,#b4760a 12%,transparent); }
   .wk-x{ position:absolute; top:4px; right:4px; border:0; background:none; color:var(--tx-faint); font-size:.8em; cursor:pointer; opacity:0; }
   .wk-card:hover .wk-x{ opacity:1; } .wk-x:hover{ color:var(--st-urg); }
   .wk-empty{ font-size:.78em; color:var(--tx-faint); text-align:center; padding:14px 6px; border:1px dashed var(--line); border-radius:8px; }
+  .wk-empty.sm{ padding:7px 4px; font-size:.74em; }
+  .wk-add{ border:1px solid var(--line); background:var(--panel); color:var(--tx-dim); border-radius:6px; width:22px; height:22px; line-height:1; font-size:.8em; cursor:pointer; flex:none; }
+  .wk-add:hover{ border-color:var(--accent); color:var(--accent); }
+  .wk-grp{ border:1px solid var(--line); border-radius:9px; background:var(--panel-2); padding:5px; display:flex; flex-direction:column; gap:5px; }
+  .wk-grp.drag-over{ border-color:var(--accent); background:var(--accent-soft); }
+  .wk-grp-h{ display:flex; align-items:baseline; gap:6px; padding:1px 4px 3px; border:0; background:none; width:100%; text-align:left; cursor:pointer; font:inherit; }
+  .wk-grp-h.ro{ cursor:default; }
+  .wk-grp-h:hover .wk-grp-n{ color:var(--accent); }
+  .wk-grp-n{ font-size:.78em; font-weight:700; color:var(--tx-dim); text-transform:uppercase; letter-spacing:.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wk-grp-t{ font-size:.74em; color:var(--tx-faint); margin-left:auto; white-space:nowrap; }
+  .wk-grp-b{ display:flex; flex-direction:column; gap:5px; }
+  .wk-loose{ display:flex; flex-direction:column; gap:5px; }
   .wk-tray{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; position:sticky; top:8px; max-height:calc(100vh - 210px); display:flex; flex-direction:column; }
   .wk-tray-h{ display:flex; align-items:center; gap:8px; }
   .wk-tray-sub{ font-size:.78em; color:var(--tx-faint); margin:4px 0 10px; }
   .wk-tray-body{ overflow-y:auto; display:flex; flex-direction:column; gap:6px; border-radius:8px; }
   .wk-tray-body.drag-over{ outline:2px dashed var(--accent); outline-offset:3px; }
-  .wk-tray-row{ display:flex; align-items:flex-start; gap:6px; border:1px solid var(--line); border-radius:8px; padding:7px 8px; cursor:grab; background:var(--panel); }
+  .wk-tray-row{ display:flex; align-items:flex-start; gap:6px; border:1px solid var(--line); border-radius:8px; padding:7px 8px; cursor:grab; background:var(--panel); overflow:hidden; }
+  .wk-tray-row .wk-title{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
   .wk-tray-row:hover{ border-color:var(--accent); }
   .wk-tr-main{ flex:1; min-width:0; }
   .wk-to{ flex:none; width:44px; font-size:.78em; border:1px solid var(--line); border-radius:6px; background:var(--panel-2); color:var(--tx-dim); padding:2px; cursor:pointer; }
