@@ -133,7 +133,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque", bg:"banda", density:"normal",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
-  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false, wkFold:{},
+  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false, wkFold:{}, wkFoldB:{},
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
@@ -783,13 +783,18 @@ function semanaHTML(){
     const loose=bl.filter(b=>b.nombre===LOOSE);
     const looseCards=loose.flatMap(b=>(b.tareas||[]).map(id=>{ const t=taskById(id); return t?wkCard({t,b},d,locked):''; })).join("");
     const grupos=named.map(b=>{
+      const n=(b.tareas||[]).length;
+      const fb=!!state.wkFoldB[b.id];
       const cards=(b.tareas||[]).map(id=>{ const t=taskById(id); return t?wkCard({t,b},d,locked,true):''; }).join("");
       const rango=(b.inicio||b.fin)?`${b.inicio||'—'}${b.fin?'–'+b.fin:''}`:'';
-      return `<div class="wk-grp" data-day="${d}" data-b="${b.id}">
-        <div class="wk-grp-h" title="${esc(b.nombre||'Bloque')}${rango?' · '+esc(rango):''}" ${locked?'':`data-act="wkBlockEdit" data-id="${b.id}"`}>
-          <span class="wk-grp-n">${esc(b.nombre||'Bloque')}</span>${rango?`<span class="wk-grp-t">${esc(rango)}</span>`:''}
+      return `<div class="wk-grp ${fb?'is-fold':''}" data-day="${d}" data-b="${b.id}">
+        <div class="wk-grp-h" title="${esc(b.nombre||'Bloque')}${rango?' · '+esc(rango):''}">
+          <button class="wk-fold sm" data-act="wkFoldBlk" data-id="${b.id}" title="${fb?'Desplegar el bloque':'Plegar el bloque'}" aria-expanded="${!fb}">${fb?'▸':'▾'}</button>
+          <span class="wk-grp-n" ${locked?'':`data-act="wkBlockEdit" data-id="${b.id}"`}>${esc(b.nombre||'Bloque')}</span>
+          ${rango?`<span class="wk-grp-t">${esc(rango)}</span>`:''}
         </div>
-        <div class="wk-grp-b">${cards||`<div class="wk-empty sm">${locked?'—':'Soltá acá'}</div>`}</div>
+        ${fb?`<button class="wk-foldnote sm" data-act="wkFoldBlk" data-id="${b.id}">${n?`${n} tarea${n===1?'':'s'}`:'Sin tareas'}</button>`
+            :`<div class="wk-grp-b">${cards||`<div class="wk-empty sm">${locked?'—':'Soltá acá'}</div>`}</div>`}
       </div>`;
     }).join("");
     const sueltas=looseCards?`<div class="wk-loose">${named.length?'<div class="wk-grp-h ro"><span class="wk-grp-n">Sin bloque</span></div>':''}${looseCards}</div>`:'';
@@ -2407,8 +2412,12 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  wkFoldBlk:(el)=>{ const id=el.dataset.id; state.wkFoldB[id]=!state.wkFoldB[id]; paintTasks(); },
   wkFold:(el)=>{ const d=el.dataset.d; state.wkFold[d]=!state.wkFold[d]; paintTasks(); },
-  wkFoldAll:(el)=>{ const on=el.dataset.k==='fold'; weekDays().forEach(d=>{ if(on)state.wkFold[d]=true; else delete state.wkFold[d]; }); paintTasks(); },
+  wkFoldAll:(el)=>{ const on=el.dataset.k==='fold';
+    weekDays().forEach(d=>{ if(on)state.wkFold[d]=true; else delete state.wkFold[d]; });
+    if(!on) state.wkFoldB={};
+    paintTasks(); },
   wkBlockNew:(el)=>openBlockModal(el.dataset.d,null),
   wkBlockEdit:(el)=>openBlockModal(null,el.dataset.id),
   wkBlockSave:(el)=>saveBlockFromModal(el.dataset.d,el.dataset.id),
