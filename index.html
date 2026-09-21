@@ -359,7 +359,7 @@
   .wk-add:hover{ border-color:var(--accent); color:var(--accent); }
   .wk-grp{ border:1px solid var(--line); border-radius:9px; background:var(--panel-2); padding:5px; display:flex; flex-direction:column; gap:5px; }
   .wk-grp.drag-over{ border-color:var(--accent); background:var(--accent-soft); }
-  .wk-grp-h{ display:flex; align-items:baseline; gap:6px; padding:1px 4px 3px; border:0; background:none; width:100%; text-align:left; cursor:pointer; font:inherit; }
+  .wk-grp-h{ display:flex; align-items:baseline; gap:5px; padding:1px 4px 3px; border:0; background:none; width:100%; text-align:left; font:inherit; }
   .wk-grp-h.ro{ cursor:default; }
   .wk-grp-h:hover .wk-grp-n{ color:var(--accent); }
   .wk-grp-n{ font-size:.78em; font-weight:700; color:var(--tx-dim); text-transform:uppercase; letter-spacing:.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -373,6 +373,10 @@
   .wk-fold:hover{ color:var(--accent); }
   .wk-col.is-fold{ min-height:0; }
   .wk-foldnote{ border:0; background:none; width:100%; text-align:left; padding:8px 11px 10px; font:inherit; font-size:.76em; color:var(--tx-faint); cursor:pointer; }
+  .wk-foldnote.sm{ padding:0 4px 4px; font-size:.74em; }
+  .wk-fold.sm{ font-size:.72em; }
+  .wk-grp.is-fold{ gap:2px; }
+  .wk-grp-n[data-act]{ cursor:pointer; }
   .wk-foldnote:hover{ color:var(--accent); }
   .wk-tray.wide .wk-tray-h{ flex-wrap:wrap; }
   .wk-tray.wide .wk-tray-body{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px; max-height:340px; overflow-y:auto; padding-right:2px; }
