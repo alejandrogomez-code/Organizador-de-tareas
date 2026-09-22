@@ -176,9 +176,9 @@ function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("sh
 /* ============================================================
    Persistencia (Supabase)
    ============================================================ */
-function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,files:t.files||[],detail:t.detail||null,recur:t.recur||null,cuad:t.cuad||null,subs:t.subs||[]}; }
+function serTask(t){ return {id:t.id,user_id:UID,n:t.n,created:t.created||null,title:t.title||"",status:t.status||"sin",due:t.due||null,area:t.area||null,resp:t.resp||null,obj:t.obj||null,url:t.url||null,file:t.file||null,files:t.files||[],detail:t.detail||null,recur:t.recur||null,cuad:t.cuad||null,subs:t.subs||[],sync_notion:!!t.syncNotion,notion_page_id:t.notionPageId||null,notion_synced_at:t.notionSyncedAt||null}; }
 function serObj(o){ return {id:o.id,user_id:UID,tag:o.tag||"",name:o.name||"",area:o.area||null,owner:o.owner||null,status:o.status||"En curso",indicators:o.indicators||[],plan:o.plan||[],reviews:o.reviews||[]}; }
-function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,files:r.files||[],detail:r.detail||"",recur:r.recur||"",cuad:r.cuad||"",subs:r.subs||[]}; }
+function deTask(r){ return {id:r.id,n:r.n,created:r.created||"",title:r.title||"",status:r.status||"sin",due:r.due||"",area:r.area||"",resp:r.resp||"",obj:r.obj||"",url:r.url||"",file:r.file||null,files:r.files||[],detail:r.detail||"",recur:r.recur||"",cuad:r.cuad||"",subs:r.subs||[],syncNotion:!!r.sync_notion,notionPageId:r.notion_page_id||null,notionSyncedAt:r.notion_synced_at||null}; }
 function deObj(r){ return {id:r.id,tag:r.tag||"",name:r.name||"",area:r.area||"",owner:r.owner||"",status:r.status||"En curso",indicators:r.indicators||[],plan:r.plan||[],reviews:r.reviews||[]}; }
 function serVenc(v){ return {id:v.id,user_id:UID,area:v.area||null,concepto:v.concepto||"",tipo:v.tipo||null,due:v.due||null,periodicidad:v.periodicidad||"unica",resp:v.resp||null,status:v.status||"pend",url:v.url||null,nota:v.nota||null}; }
 function deVenc(r){ return {id:r.id,area:r.area||"",concepto:r.concepto||"",tipo:r.tipo||"",due:r.due||"",periodicidad:r.periodicidad||"unica",resp:r.resp||"",status:r.status||"pend",url:r.url||"",nota:r.nota||""}; }
@@ -198,6 +198,28 @@ function db(){ return sb && UID; }
 function scheduleSaveTask(id){ if(!db())return; clearTimeout(timers["t"+id]); timers["t"+id]=setTimeout(()=>saveTaskNow(id),500); }
 async function saveTaskNow(id){ if(!db())return; const t=state.tasks.find(x=>x.id===id); if(!t)return; const {error}=await sb.from("tasks").upsert(serTask(t)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteTaskDb(id){ if(!db())return; const {error}=await sb.from("tasks").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
+/* ---------- Push a Notion (ver NOTION-SYNC.md) ---------- */
+async function pushToNotion(id){
+  if(!db()){ toast("Iniciá sesión primero"); return; }
+  const t=state.tasks.find(x=>x.id===id); if(!t)return;
+  await saveTaskNow(id);                        // que Notion reciba la versión de recién
+  toast("Enviando a Notion…");
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){ toast("Sesión vencida, volvé a entrar"); return; }
+    const r=await fetch("/api/notion-push",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({taskId:id})
+    });
+    const out=await r.json();
+    if(!r.ok){ toast("Notion: "+(out.error||r.status)); return; }
+    // Sin esto el próximo upsert borraría el vínculo recién creado.
+    t.notionPageId=out.pageId; t.syncNotion=true; t.notionSyncedAt=new Date().toISOString();
+    toast("Enviada a Notion");
+    if(modalId===id) openModal(id);
+  }catch(e){ toast("No se pudo enviar: "+e.message); }
+}
 function scheduleSaveObj(id){ if(!db())return; clearTimeout(timers["o"+id]); timers["o"+id]=setTimeout(()=>saveObjNow(id),500); }
 async function saveObjNow(id){ if(!db())return; const o=getObjById(id); if(!o)return; const {error}=await sb.from("objetivos").upsert(serObj(o)); if(error)toast("No se pudo guardar: "+error.message); }
 async function deleteObjDb(id){ if(!db())return; const {error}=await sb.from("objetivos").delete().eq("id",id); if(error)toast("No se pudo borrar: "+error.message); }
@@ -1286,11 +1308,12 @@ function openModal(id){
       <div><div class="m-block-h"><span>Detalle</span></div><textarea class="m-detail" id="mDetail" placeholder="Notas, contexto, pasos…">${esc(t.detail)}</textarea></div>
       <div><div class="m-block-h"><span>Adjuntos (PDF / foto / Excel)</span></div><div class="attach-row" style="flex-wrap:wrap">${(t.files||[]).map((f,i)=>`<span class="file-pill">📎 <button class="lnk" data-mfile="open" data-i="${i}" style="border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline">${esc(f.name)}</button> <button class="del" data-mfile="del" data-i="${i}" style="opacity:1">✕</button></span>`).join("")}<label class="btn-ghost" style="cursor:pointer">＋ Subir archivo<input type="file" id="mFile" style="display:none" accept=".pdf,.xlsx,.xls,.doc,.docx,image/*"></label><span id="mFileBusy" style="font-size:.8em;color:var(--tx-faint);display:none">Subiendo…</span></div></div>
     </div>
-    <div class="modal-foot"><button class="link-danger" id="mDelete">Eliminar tarea</button><button class="btn-primary" id="mDone">Listo</button></div>`;
+    <div class="modal-foot"><button class="link-danger" id="mDelete">Eliminar tarea</button><button class="btn-ghost" id="mNotion">${t.notionPageId?"Actualizar en Notion":"Enviar a Notion"}</button><button class="btn-primary" id="mDone">Listo</button></div>`;
   // binds
   const set=(f,v)=>setField(id,f,v);
   $("#mTitle").oninput=e=>set("title",e.target.value);
   $("#mStatus").onchange=e=>{ set("status",e.target.value); openModal(id); };
+  $("#mNotion").onclick=()=>pushToNotion(id);
   $("#mDue").onchange=e=>set("due",e.target.value);
   $("#mArea").onchange=e=>set("area",e.target.value);
   $("#mResp").onchange=e=>set("resp",e.target.value);
