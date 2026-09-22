@@ -133,7 +133,7 @@ const state = {
   areas:[], responsables:[], objetivos:[], shortcuts:[], theme:"bosque", bg:"banda", density:"normal",
   filters:{estado:"",area:"",resp:"",venc:"",q:""},
   tasks:[], vencimientos:[], reuniones:[], documentos:[], bloques:[],
-  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false, wkFold:{}, wkFoldB:{},
+  blocksDate:null, blockPick:null, blkView:"agenda", blkOpen:null, weekReview:null, weekRef:null, wkQ:"", freeOpen:false, wkFold:{}, wkFoldB:{}, wkTrayFold:true,
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
@@ -852,14 +852,16 @@ function trayHTML(mode){
     </div>`;
   }).join("");
   const wide=mode!=='bloques';
-  return `<div class="wk-tray ${wide?'wide':''}">
+  const fold=wide&&state.wkTrayFold;
+  return `<div class="wk-tray ${wide?'wide':''} ${fold?'is-fold':''}">
     <div class="wk-tray-h">
-      <span style="font-weight:600">Bandeja</span><span class="wk-n">${avail.length}</span>
+      ${wide?`<button class="wk-fold" data-act="wkTrayFold" title="${fold?'Abrir la bandeja':'Cerrar la bandeja'}" aria-expanded="${!fold}">${fold?'▴':'▾'}</button>`:''}
+      <button class="wk-tray-t" ${wide?'data-act="wkTrayFold"':''}>Bandeja</button><span class="wk-n">${avail.length}</span>
       <span class="wk-tray-sub inline">${mode==='bloques'?'Arrastrá una tarea a un bloque.':'Tareas sin día asignado; arrastralas a un día o a un bloque.'}${freed?` <b>${freed}</b> se liberaron de días pasados.`:''}</span>
       <input type="search" class="inp tray-q" placeholder="Buscar en la bandeja…" value="${esc(state.wkQ||'')}" data-act="wkSearch" data-input>
     </div>
-    <div class="wk-tray-body">${rows||'<div class="wk-empty">No hay tareas disponibles.</div>'}</div>
-    ${avail.length>60?`<p class="wk-tray-sub">Se muestran 60 de ${avail.length}. Usá el buscador para filtrar.</p>`:''}
+    ${fold?'':`<div class="wk-tray-body">${rows||'<div class="wk-empty">No hay tareas disponibles.</div>'}</div>`}
+    ${!fold&&avail.length>60?`<p class="wk-tray-sub">Se muestran 60 de ${avail.length}. Usá el buscador para filtrar.</p>`:''}
   </div>`;
 }
 function wireSemana(){
@@ -2412,6 +2414,7 @@ function foroDel(i){
 const ACTIONS = {
   goCard:(el)=>go(el.dataset.id),
   taskView:(el)=>{ state.taskView=el.dataset.id; render(); },
+  wkTrayFold:()=>{ state.wkTrayFold=!state.wkTrayFold; paintTasks(); },
   wkFoldBlk:(el)=>{ const id=el.dataset.id; state.wkFoldB[id]=!state.wkFoldB[id]; paintTasks(); },
   wkFold:(el)=>{ const d=el.dataset.d; state.wkFold[d]=!state.wkFold[d]; paintTasks(); },
   wkFoldAll:(el)=>{ const on=el.dataset.k==='fold';
@@ -2425,7 +2428,7 @@ const ACTIONS = {
     if(b.tareas.length&&!confirm("¿Eliminar este bloque? Las tareas no se borran, vuelven a la bandeja."))return;
     state.bloques=state.bloques.filter(x=>x.id!==b.id); deleteBloqueDb(b.id); closeModal(); paintTasks(); },
   wkNav:(el)=>{ const k=el.dataset.id; if(k==='today')state.weekRef=today(); else { const d=weekRefDate(); d.setDate(d.getDate()+(k==='next'?7:-7)); state.weekRef=ymd(d); } paintTasks(); },
-  wkSearch:(el)=>{ state.wkQ=el.value; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
+  wkSearch:(el)=>{ state.wkQ=el.value; if(el.value.trim())state.wkTrayFold=false; clearTimeout(timers.wkq); timers.wkq=setTimeout(()=>paintTasks(),250); },
   trayToBlock:(el)=>{ const v=el.value; if(!v)return; assignToDay(el.dataset.t,state.blocksDate,v==='__loose'?null:v); paintTasks(); },
   wkAssign:(el)=>{ const v=el.value; if(!v)return; const [d,b]=v.split("|"); assignToDay(el.dataset.t,d,b||null); paintTasks(); },
   wkUnassign:(el)=>{ clearAssign(el.dataset.t,el.dataset.d); paintTasks(); },
