@@ -30,7 +30,7 @@ const NOTION_VERSION = "2025-09-03";
 // Notion → app. El inverso vive en notion-push.js.
 const ESTADO = {
   "Sin iniciar": "sin",
-  "Urgente": "urg",
+  "Urgente": "urg", // no es un estado: se traduce a prioridad alta (ver abajo)
   "En proceso": "proc",
   "Completado": "comp",
   "Descartado": "desc",
@@ -132,7 +132,7 @@ export default async function handler(req, res) {
       ? "id=eq." + encodeURIComponent(idApp)
       : "notion_page_id=eq." + encodeURIComponent(norm(pageId));
 
-    const q = await fetch(SUPABASE_URL + "/rest/v1/tasks?" + filter + "&select=id,status", {
+    const q = await fetch(SUPABASE_URL + "/rest/v1/tasks?" + filter + "&select=id,status,prio", {
       headers: sbHeaders,
     });
     const rows = await q.json();
@@ -141,16 +141,27 @@ export default async function handler(req, res) {
       return;
     }
 
+    // "Urgente" en Notion = prioridad alta en la app. Si la tarea estaba
+    // cerrada, la reabrimos; si estaba abierta, conservamos su estado.
+    const row = rows[0];
+    let patch;
+    if (status === "urg") {
+      const cerrada = row.status === "comp" || row.status === "desc";
+      patch = { prio: "alta", status: cerrada ? "sin" : (row.status === "urg" ? "sin" : row.status) };
+    } else {
+      patch = { status };
+    }
+
     // Acá se corta el eco.
-    if (rows[0].status === status) {
+    if (patch.status === row.status && (!patch.prio || patch.prio === row.prio)) {
       res.status(200).json({ ok: true, skipped: "ya estaba en ese estado" });
       return;
     }
 
-    const upd = await fetch(SUPABASE_URL + "/rest/v1/tasks?id=eq." + encodeURIComponent(rows[0].id), {
+    const upd = await fetch(SUPABASE_URL + "/rest/v1/tasks?id=eq." + encodeURIComponent(row.id), {
       method: "PATCH",
       headers: { ...sbHeaders, Prefer: "return=minimal" },
-      body: JSON.stringify({ status, notion_synced_at: new Date().toISOString() }),
+      body: JSON.stringify({ ...patch, notion_synced_at: new Date().toISOString() }),
     });
     if (!upd.ok) {
       const e = await upd.text();
@@ -158,7 +169,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    res.status(200).json({ ok: true, taskId: rows[0].id, status });
+    res.status(200).json({ ok: true, taskId: row.id, ...patch });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }

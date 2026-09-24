@@ -87,6 +87,18 @@ export const SUPABASE_ANON_KEY = "eyJhbGciOi...";            // ← tu anon publ
 
 ---
 
+## Actualización: rediseño 2026
+
+1. En Supabase → **SQL Editor**, corré una vez `supabase/migracion_2026_rediseno.sql`.
+2. Subí `index.html`, `app.js` y la carpeta `api/` a GitHub (Vercel publica solo).
+
+Novedades: barra lateral clara, pantalla de Inicio nueva, lista de tareas con ficha en panel lateral,
+"Urgente" como prioridad, historial de actividad, "pospuesta N veces", enlace directo a cada tarea
+(`…/#T-0012`), filtro "Mis tareas", búsqueda por código, responsable por subtarea y vista para celular.
+
+**Atajos de teclado** en Seguimiento: `↑`/`↓` cambian de tarea · `Enter` abre · `Esc` cierra ·
+`/` busca · `N` nueva tarea · `U` marca/desmarca urgente.
+
 ## Cómo se usa (resumen)
 
 - **Tareas:** vista tabla o kanban, filtros, agrupar, subtareas, recurrencia, vínculo a objetivos. Clic en el título abre la ficha completa.

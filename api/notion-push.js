@@ -26,9 +26,12 @@ const NOTION_VERSION = "2025-09-03";
 
 // app → Notion. El inverso vive en notion-hook.js; si tocás uno,
 // tocá el otro.
+// "Urgente" ya no es un estado en la app sino una prioridad (task.prio === "alta").
+// Para no tocar la base de Notion, una tarea abierta y urgente se sigue mandando
+// con Estado = "Urgente".
 const ESTADO = {
   sin: "Sin iniciar",
-  urg: "Urgente",
+  urg: "Urgente", // filas viejas, antes de la migración
   proc: "En proceso",
   comp: "Completado",
   desc: "Descartado",
@@ -50,7 +53,11 @@ function notionProps(task) {
   return {
     "Tarea": { title: text(task.title || "(sin título)") },
     "ID app": { rich_text: text(task.id) },
-    "Estado": select(ESTADO[task.status] || "Sin iniciar"),
+    "Estado": select(
+      task.prio === "alta" && (task.status === "sin" || task.status === "proc")
+        ? "Urgente"
+        : (ESTADO[task.status] || "Sin iniciar")
+    ),
     "Vence": { date: task.due ? { start: task.due } : null },
     "Área": select(task.area),
     "Responsable": select(task.resp),
