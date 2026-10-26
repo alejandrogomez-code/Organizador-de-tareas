@@ -682,7 +682,7 @@ function trowHTML(t){
   meta.push(t.area?`<span class="adot" style="background:${tagColor(t.area)}"></span>${esc(t.area)}`:'<span style="color:var(--tx-faint)">Sin área</span>');
   meta.push(t.resp?`<span class="avs" style="background:${tagColor(t.resp)}">${esc((t.resp[0]||'?').toUpperCase())}</span>${esc(t.resp)}`:'<span style="color:var(--tx-faint)">Sin asignar</span>');
   const pjc=proyChip(t); if(pjc) meta.splice(isUrg(t)&&op?1:0,0,pjc);
-if(tot) meta.push(`<span class="tprog" title="${done} de ${tot} subtareas"><i><b style="width:${done/tot*100}%"></b></i>${done}/${tot}</span>`);
+if(tot) meta.push(`<span class="tprog" title="${done} de ${tot} subtareas"><i><b style="width:${done/tot*100}%"></b></i>${done}/${tot} · ${Math.round(done/tot*100)}%</span>`);
   const nf=(t.files||[]).length+(t.url?1:0); if(nf) meta.push(`<span title="Adjuntos y enlaces">📎 ${nf}</span>`);
   const pp=op?postCount(t):0; if(pp>0) meta.push(`<span class="post" title="Se movió el vencimiento o quedó sin hacer en un bloque planificado">⟲ pospuesta ${pp}×</span>`);
   return `<div class="trow ${drawerId===t.id?'sel':''} ${op?'':'closed'}" data-act="open" data-id="${t.id}" tabindex="0" style="--bc:${barColor(t)}"><span class="tcode">${taskCode(t)}</span><div class="tmain"><div class="ttl" title="${esc(t.title)}">${esc(t.title)}${t.recur?`<span class="rec" title="Se repite: ${recurLabel(t.recur)}">↻</span>`:''}</div><div class="tmeta">${meta.join('<span class="sepd">·</span>')}</div></div><span class="tdue ${dc}">${dt}</span><span class="tpill ${st.cls}">${st.label}</span></div>`;
@@ -709,7 +709,7 @@ function kanbanHTML(list){
     const items=list.filter(t=>t.status===s.key).sort((a,b)=>((isUrg(b)?1:0)-(isUrg(a)?1:0))||(a.due||'9999').localeCompare(b.due||'9999')||a.n-b.n);
     order.push(...items.map(t=>t.id));
     const cards=items.map(t=>{ const done=t.subs.filter(x=>x.d).length,tot=t.subs.length;
-      return `<div class="kcard" draggable="true" data-id="${t.id}" data-act="open" style="--bc:${barColor(t)}"><div class="kcode">${taskCode(t)}${isUrg(t)&&isOpen(t)?' · <b style="color:var(--red)">⚑ Urgente</b>':''}</div><div class="kt">${esc(t.title)}${t.recur?' <span class="recur-badge" title="Se repite: '+recurLabel(t.recur)+'">↻</span>':''}</div><div class="kmeta">${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}${tot?`<span title="subtareas">☑ ${done}/${tot}</span>`:''}${t.due?`<span class="${dueClass(t.due)}">📅 ${fmt(t.due)}</span>`:''}${t.resp?`<span class="who" title="${esc(t.resp)}">${initials(t.resp)}</span>`:''}</div></div>`;
+      return `<div class="kcard" draggable="true" data-id="${t.id}" data-act="open" style="--bc:${barColor(t)}"><div class="kcode">${taskCode(t)}${isUrg(t)&&isOpen(t)?' · <b style="color:var(--red)">⚑ Urgente</b>':''}</div><div class="kt">${esc(t.title)}${t.recur?' <span class="recur-badge" title="Se repite: '+recurLabel(t.recur)+'">↻</span>':''}</div><div class="kmeta">${t.area?`<span class="tag" style="background:var(--line-2);color:var(--tx-dim)">${esc(t.area)}</span>`:''}${tot?`<span title="subtareas">☑ ${done}/${tot} · ${Math.round(done/tot*100)}%</span>`:''}${t.due?`<span class="${dueClass(t.due)}">📅 ${fmt(t.due)}</span>`:''}${t.resp?`<span class="who" title="${esc(t.resp)}">${initials(t.resp)}</span>`:''}</div></div>`;
     }).join("");
     return `<div class="kcol" data-status="${s.key}"><div class="kcol-h"><span class="${s.cls}" style="padding:2px 8px;border-radius:20px">${s.label}</span><span class="count">${items.length}</span></div>${cards||'<div style="color:var(--tx-faint);font-size:.84em;padding:6px;text-align:center">Sin tareas</div>'}</div>`;
   }).join("");
@@ -1492,7 +1492,7 @@ function renderDrawer(keepScroll){
   // subtareas
   const dn=t.subs.filter(x=>x.d).length;
   const respOpts=r=>`<option value="">Asignar</option>${state.responsables.map(n=>`<option value="${esc(n)}" ${n===r?'selected':''}>${esc(n)}</option>`).join("")}`;
-  const subs=`<div class="dsec"><h4>Subtareas <small>${t.subs.length?`${dn} de ${t.subs.length} listas`:''}</small></h4>
+  const subs=`<div class="dsec"><h4>Subtareas <small>${t.subs.length?`${dn} de ${t.subs.length} listas · ${Math.round(dn/t.subs.length*100)}%`:''}</small></h4>
     ${t.subs.length?`<div class="dpbar"><b style="width:${dn/t.subs.length*100}%"></b></div>`:''}
     ${t.subs.map((x,i)=>`<div class="dsub ${x.d?'done':''}"><input type="checkbox" ${x.d?'checked':''} data-sub="chk" data-i="${i}" aria-label="Completar subtarea"><input class="dsx" value="${esc(x.t)}" data-sub="txt" data-i="${i}"><select class="dsr ${x.r?'set':''}" data-sub="resp" data-i="${i}" title="Responsable de la subtarea">${respOpts(x.r)}</select><button class="dsdel" data-sub="del" data-i="${i}" title="Borrar subtarea">✕</button></div>`).join("")}
     <div class="dsadd"><span>＋</span><input id="dwNewSub" placeholder="Agregar subtarea y Enter…"></div></div>`;
@@ -3099,7 +3099,7 @@ function proyRow(t){
   const done=t.subs.filter(x=>x.d).length, tot=t.subs.length, sub=[];
   if(isUrg(t)&&op) sub.push('<span class="flag">⚑ Urgente</span>');
   if(t.resp) sub.push(esc(t.resp));
-  if(tot) sub.push(`<span class="tprog"><i><b style="width:${done/tot*100}%"></b></i>${done}/${tot}</span>`);
+  if(tot) sub.push(`<span class="tprog"><i><b style="width:${done/tot*100}%"></b></i>${done}/${tot} · ${Math.round(done/tot*100)}%</span>`);
   if(t.detail) sub.push(`<span class="pj-det">${esc(t.detail.split("\n")[0].slice(0,110))}</span>`);
   const agc=(state.proyectos.find(p=>p.id===t.proyecto_id)?.agentes||[]).find(a=>a.nombre===m.agente||a.nombre==='Agente '+m.agente);
   const difc={Baja:'var(--green)',Media:'var(--orange)',Alta:'var(--red)'}[m.dif]||'var(--tx-faint)';
