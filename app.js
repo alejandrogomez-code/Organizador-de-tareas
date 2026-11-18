@@ -147,7 +147,7 @@ const state = {
   foros:[], mesaFiltro:"", mesaTab:"reuniones",
   calUrls:[], calView:"mes", calCursor:null, calEvents:[], calLoading:false, calError:"", calLoaded:false, calEditing:false,
   eventos:[], calLayers:{bloques:true,reuniones:true,vencimientos:true,tareas:true,eventos:true,google:true}, calDaySel:null, evtSel:null,
-  cal:{}, calLoaded:false, calLoading:false, calError:null,
+  cal:{}, sgcLoaded:false, sgcLoading:false, sgcError:null,
   adm:{}, admLoaded:false, admLoading:false, admError:null, admCierreSel:null,
   finPagos:[], finConceptos:[], finTC:0, finFilters:{concepto:"",estado:"",desde:"",hasta:"",q:""}, finGroup:"semana",
 };
@@ -2278,61 +2278,87 @@ function sectionRepo(secId){
 }
 function addDoc(secId){ const d={id:crypto.randomUUID(),area:secId,titulo:"",categoria:"",url:"",files:[],nota:"",fecha:today()}; state.documentos.unshift(d); saveDocNow(d.id); render(); }
 
-/* ---------- Sistema de Calidad (reflejado desde la otra app, solo lectura) ---------- */
+/* ---------- Sistema de Calidad (reflejado desde el SGC de Odoo, solo lectura) ---------- */
+const HAL_CERRADO=/cerr|complet|finaliz|resuelt|descart|anul|cancel/;
 async function loadCalidad(){
-  state.calLoading=true; state.calError=null; render();
+  state.sgcLoading=true; state.sgcError=null; render();
   try{
-    const h=await sb.from("cal_hallazgos").select("*"); if(h.error) throw h.error;
-    const m=await sb.from("cal_mejoras").select("*"); if(m.error) throw m.error;
-    const p=await sb.from("cal_procedimientos").select("*"); if(p.error) throw p.error;
-    state.cal={hallazgos:h.data||[],mejoras:m.data||[],procedimientos:p.data||[]};
-    state.calLoaded=true;
-    syncHallazgosToTasks(state.cal.hallazgos);
-  }catch(e){ state.calError=(e&&e.message)||String(e); }
-  state.calLoading=false; render();
+    const {data}=await sb.auth.getSession();
+    const token=data&&data.session&&data.session.access_token;
+    if(!token) throw new Error("No hay sesión iniciada en el Panel.");
+    const r=await fetch("/api/odoo-sgc",{headers:{Authorization:"Bearer "+token}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
+    const todos=j.hallazgos||[];
+    state.cal={
+      hallazgosTodos:todos,
+      hallazgos:todos.filter(h=>!HAL_CERRADO.test((h.estado||"").toLowerCase())),
+      mejoras:j.mejoras||[],
+      procedimientos:j.procedimientos||[]
+    };
+    state.sgcLoaded=true;
+    syncHallazgosToTasks(todos);
+  }catch(e){ state.sgcError=(e&&e.message)||String(e); }
+  state.sgcLoading=false; render();
 }
-/* ---------- Autocreación de tareas de Seguimiento a partir de hallazgos de Calidad ---------- */
-function hallazgoMarker(hid){ return "[[hallazgo:"+hid+"]]"; }
-function hallazgoTaskExists(hid){ const mk=hallazgoMarker(hid); return state.tasks.some(t=>t.detail&&t.detail.indexOf(mk)>=0); }
+/* ---------- Tareas de Seguimiento ↔ hallazgos del SGC de Odoo ----------
+   Cada tarea guarda en su detalle la marca [[hallazgo:odoo-<id>]].
+   - Hallazgo abierto o en tratamiento sin tarea → se crea la tarea.
+   - Hallazgo en tratamiento → la tarea pasa a "En proceso" (si estaba sin iniciar).
+   - Hallazgo cerrado → la tarea pasa a "Completada".
+   - Hallazgo descartado → la tarea pasa a "Descartada".                     */
+function hallazgoMarker(hid){ return "[[hallazgo:odoo-"+hid+"]]"; }
+function hallazgoTask(hid){ const mk=hallazgoMarker(hid); return state.tasks.find(t=>t.detail&&t.detail.indexOf(mk)>=0); }
+function hallazgoTaskExists(hid){ return !!hallazgoTask(hid); }
 function syncHallazgosToTasks(list){
-  // solo hallazgos abiertos o en tratamiento (mismo criterio que la exportación a PDF)
-  const abiertos=(list||[]).filter(r=>{ const s=(r.estado||"").toLowerCase(); return !/cerr|complet|finaliz|resuelt|descart|anul|cancel/.test(s); });
-  let creadas=0;
-  abiertos.forEach(r=>{
-    if(!r.id || hallazgoTaskExists(r.id)) return;
-    const sev=(r.severidad||"").toLowerCase(), est=(r.estado||"").toLowerCase();
-    const status = /proc|curso|tratamiento/.test(est) ? "proc" : "sin";
+  let creadas=0, actualizadas=0;
+  (list||[]).forEach(r=>{
+    if(!r.id) return;
+    const est=(r.estado_key||r.estado||"").toLowerCase();
+    const t=hallazgoTask(r.id);
+    if(t){
+      let to=null;
+      if(/cerr/.test(est) && t.status!=="comp" && t.status!=="desc") to="comp";
+      else if(/descart/.test(est) && t.status!=="comp" && t.status!=="desc") to="desc";
+      else if(/tratamiento/.test(est) && t.status==="sin") to="proc";
+      if(to){ logT(t,to==="comp"?"done":"status",`Estado: ${stMeta(t.status).label} → ${stMeta(to).label} (hallazgo ${r.codigo||""} ${r.estado||""} en Odoo)`); t.status=to; saveTaskNow(t.id); actualizadas++; }
+      return;
+    }
+    if(HAL_CERRADO.test(est)) return; // solo se crean tareas de hallazgos abiertos o en tratamiento
+    const sev=(r.severidad||"").toLowerCase();
+    const status = /tratamiento/.test(est) ? "proc" : "sin";
     const prio = /alt|crit|may/.test(sev) ? "alta" : "";
     const detail=[
       hallazgoMarker(r.id),
-      "Hallazgo del Sistema de Calidad (creado automáticamente).",
+      "Hallazgo "+(r.codigo||"")+" del SGC de Odoo (creado automáticamente).",
       r.area?("Área del hallazgo: "+r.area):"",
       r.severidad?("Severidad: "+r.severidad):"",
       r.estado?("Estado: "+r.estado):"",
       r.fecha_deteccion?("Fecha de detección: "+fmt(r.fecha_deteccion)):""
     ].filter(Boolean).join("\n");
-    const t={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Hallazgo: "+(r.resumen||"Sin resumen"),status,prio,log:[logEntry("new","Tarea creada automáticamente desde un hallazgo de Calidad")],due:"",area:"Calidad",resp:r.responsable||"",obj:"",url:"",file:null,detail,recur:"",subs:[]};
-    state.tasks.push(t); saveTaskNow(t.id);
+    const t2={id:crypto.randomUUID(),n:state.seq++,created:today(),title:"Hallazgo: "+(r.resumen||"Sin resumen"),status,prio,log:[logEntry("new","Tarea creada automáticamente desde el hallazgo "+(r.codigo||"")+" del SGC de Odoo")],due:"",area:"Calidad",resp:r.responsable||"",obj:"",url:r.url||"",file:null,detail,recur:"",subs:[]};
+    state.tasks.push(t2); saveTaskNow(t2.id);
     creadas++;
   });
-  if(creadas>0){ toast(creadas===1?"Se creó 1 tarea nueva desde un hallazgo de Calidad.":("Se crearon "+creadas+" tareas nuevas desde hallazgos de Calidad.")); }
+  const msg=[]; if(creadas) msg.push(creadas===1?"se creó 1 tarea":"se crearon "+creadas+" tareas"); if(actualizadas) msg.push(actualizadas===1?"se actualizó 1 tarea":"se actualizaron "+actualizadas+" tareas");
+  if(msg.length) toast("Hallazgos del SGC: "+msg.join(" y ")+".");
 }
 function sectionSGC(){
-  if(state.calLoading) return `<div class="table-wrap"><div class="empty">Cargando datos de la app de Calidad…</div></div>`;
-  if(state.calError){
-    return `<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Conexión con la app de Calidad</h3>
-      <p style="font-size:.88em;color:var(--tx-dim);margin:0 0 8px">Todavía no se pueden leer los datos. Es normal si aún no corriste el archivo <b>calidad-fdw-conexion.sql</b> en Supabase (con tus datos de conexión completados).</p>
-      <p style="font-size:.8em;color:var(--st-urg);margin:0 0 12px">Detalle técnico: ${esc(state.calError)}</p>
+  if(state.sgcLoading) return `<div class="table-wrap"><div class="empty">Cargando datos del SGC de Odoo…</div></div>`;
+  if(state.sgcError){
+    return `<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">Conexión con el SGC de Odoo</h3>
+      <p style="font-size:.88em;color:var(--tx-dim);margin:0 0 8px">Todavía no se pueden leer los datos. Revisá que en Vercel estén cargadas las variables <b>ODOO_URL</b>, <b>ODOO_DB</b> y <b>ODOO_API_KEY</b> (clave API de tu usuario de Odoo).</p>
+      <p style="font-size:.8em;color:var(--st-urg);margin:0 0 12px">Detalle técnico: ${esc(state.sgcError)}</p>
       <button class="btn-ghost" data-act="calReload">Reintentar</button></div>`;
   }
   const c=state.cal||{}; const H=c.hallazgos||[],M=c.mejoras||[],P=c.procedimientos||[];
   const sevPill=s=>{ const t=(s||"").toLowerCase(); const col=/alt|crit|may/.test(t)?'st-urg':/med/.test(t)?'st-proc':'st-sin'; return `<span class="status-pill ${col}" style="cursor:default">${esc(s||'—')}</span>`; };
-  const hRows=H.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha_deteccion?fmt(r.fecha_deteccion):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.resumen||'—')}</td><td>${sevPill(r.severidad)}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
-  const mRows=M.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.mejora_realizada||r.notas||'—')}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
+  const hRows=H.map(r=>`<tr><td style="white-space:nowrap">${r.url?`<a href="${esc(r.url)}" target="_blank">${esc(r.codigo||'—')}</a>`:esc(r.codigo||'—')}</td><td class="date" style="white-space:nowrap">${r.fecha_deteccion?fmt(r.fecha_deteccion):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${esc(r.resumen||'—')}</td><td>${sevPill(r.severidad)}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
+  const mRows=M.map(r=>`<tr><td class="date" style="white-space:nowrap">${r.fecha?fmt(r.fecha):'—'}</td><td>${r.area?esc(r.area):'—'}</td><td style="max-width:320px">${r.url?`<a href="${esc(r.url)}" target="_blank">${esc(r.mejora_realizada||r.notas||'—')}</a>`:esc(r.mejora_realizada||r.notas||'—')}</td><td>${r.estado?esc(r.estado):'—'}</td><td>${r.responsable?esc(r.responsable):'—'}</td></tr>`).join("");
   const pRows=P.map(r=>`<tr><td>${esc(r.procedimiento||'—')}</td><td>${r.area?esc(r.area):'—'}</td><td style="text-align:center">${r.version?esc(r.version):'—'}</td><td>${r.estado?esc(r.estado):'—'}</td><td class="date" style="white-space:nowrap">${r.fecha_proxima_revision?fmt(r.fecha_proxima_revision):'—'}</td><td style="text-align:center">${r.link?`<a class="icon-link" href="${esc(r.link)}" target="_blank">🔗</a>`:'—'}</td></tr>`).join("");
-  const block=(title,n,head,rows,empty)=>`<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">${title} <span style="color:var(--tx-faint);font-weight:400">· ${n}</span></h3><div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr>${head}</tr></thead><tbody>${rows||`<tr><td colspan="6"><div class="empty" style="padding:22px">${empty}</div></td></tr>`}</tbody></table></div></div>`;
-  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde tu app de Calidad · solo lectura (se editan en esa app).</span><div style="flex:1"></div><button class="btn-ghost" data-act="calExportPdf" title="Descargar hallazgos abiertos y en tratamiento en PDF">⬇ PDF hallazgos</button><button class="btn-ghost" data-act="calReload">↻ Actualizar</button></div>
-    ${block("Hallazgos sin cerrar",H.length,"<th>Detección</th><th>Área</th><th>Resumen</th><th>Severidad</th><th>Estado</th><th>Responsable</th>",hRows,"Sin hallazgos abiertos.")}
+  const block=(title,n,head,rows,empty)=>`<div class="scard"><h3 style="color:var(--tx);text-transform:none;letter-spacing:0;font-size:.95em">${title} <span style="color:var(--tx-faint);font-weight:400">· ${n}</span></h3><div class="table-wrap" style="box-shadow:none;border:1px solid var(--line)"><table class="tasks" style="min-width:640px"><thead><tr>${head}</tr></thead><tbody>${rows||`<tr><td colspan="7"><div class="empty" style="padding:22px">${empty}</div></td></tr>`}</tbody></table></div></div>`;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:.82em;color:var(--tx-faint)">Datos en vivo desde el SGC de Odoo · solo lectura (se editan en Odoo).</span><div style="flex:1"></div><button class="btn-ghost" data-act="calExportPdf" title="Descargar hallazgos abiertos y en tratamiento en PDF">⬇ PDF hallazgos</button><button class="btn-ghost" data-act="calReload">↻ Actualizar</button></div>
+    ${block("Hallazgos sin cerrar",H.length,"<th>Código</th><th>Detección</th><th>Área</th><th>Resumen</th><th>Severidad</th><th>Estado</th><th>Responsable</th>",hRows,"Sin hallazgos abiertos.")}
     ${block("Mejoras en curso",M.length,"<th>Fecha</th><th>Área</th><th>Mejora</th><th>Estado</th><th>Responsable</th>",mRows,"Sin mejoras pendientes.")}
     ${block("Procedimientos en revisión",P.length,"<th>Procedimiento</th><th>Área</th><th>Versión</th><th>Estado</th><th>Próx. revisión</th><th>Link</th>",pRows,"Sin procedimientos en revisión.")}`;
 }
@@ -2735,7 +2761,7 @@ const ACTIONS = {
   saveRev:()=>saveReview(),
   taskFromNext:()=>taskFromNextStep(),
   // secciones operativas
-  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.calLoaded && !state.calLoading) loadCalidad(); if(el.dataset.id==='cierres' && !state.admLoaded && !state.admLoading) loadAdmin(); },
+  secTab:(el)=>{ state.secTab=el.dataset.id; state.reuSel=null; state.secScEdit=false; render(); if(el.dataset.id==='sgc' && !state.sgcLoaded && !state.sgcLoading) loadCalidad(); if(el.dataset.id==='cierres' && !state.admLoaded && !state.admLoading) loadAdmin(); },
   calReload:()=>loadCalidad(),
   calExportPdf:()=>exportHallazgosPdf(),
   admReload:()=>loadAdmin(),
